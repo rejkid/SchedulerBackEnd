@@ -1,0 +1,957 @@
+using AutoMapper;
+using BC = BCrypt.Net.BCrypt;
+using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Tokens;
+using System;
+using System.Collections.Generic;
+using System.IdentityModel.Tokens.Jwt;
+using System.Linq;
+using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
+using WebApi.Entities;
+using WebApi.Helpers;
+using WebApi.Models.Accounts;
+using Microsoft.EntityFrameworkCore;
+using System.Threading.Tasks;
+using Newtonsoft.Json.Linq;
+using Microsoft.AspNetCore.WebUtilities;
+using System.Diagnostics;
+using System.Threading;
+using log4net;
+namespace WebApi.Services
+{
+    public interface IAccountService
+    {
+        AuthenticateResponse Authenticate(AuthenticateRequest model, string ipAddress);
+        AuthenticateResponse RefreshToken(string token, string ipAddress);
+        void RevokeToken(string token, string ipAddress);
+        void Register(RegisterRequest model, string origin);
+        void VerifyEmail(string token);
+        void ForgotPassword(ForgotPasswordRequest model, string origin);
+        void ValidateResetToken(ValidateResetTokenRequest model);
+        void ResetPassword(ResetPasswordRequest model);
+        IEnumerable<AccountResponse> GetAll();
+        AccountResponse GetById(int id);
+
+        public ScheduleDateTimeResponse GetAllDates();
+        public DateFunctionTeamResponse GetTeamsByFunctionForDate(string date);
+
+        AccountResponse Create(CreateRequest model);
+        AccountResponse Update(int id, UpdateRequest model);
+        public AccountResponse DeleteSchedule(int id, UpdateScheduleRequest scheduleReq);
+        public AccountResponse AddSchedule(int id, UpdateScheduleRequest scheduleReq);
+        public AccountResponse DeleteFunction(int id, UpdateUserFunctionRequest functionReq);
+        public AccountResponse AddFunction(int id, UpdateUserFunctionRequest functionReq);
+        //public SchedulePoolElementsResponse ChangeUserAvailability(int id, UpdateScheduleRequest scheduleReq);
+        public AccountResponse GetScheduleFromPool(int id, UpdateScheduleRequest scheduleReq);
+        public AccountResponse MoveSchedule2Pool(int id, UpdateScheduleRequest scheduleReq);
+
+        public SchedulePoolElementsResponse GetAvailableSchedules(int id);
+        public SchedulePoolElementsResponse GetAllAvailableSchedules();
+
+        public SchedulePoolElement RemoveFromPool(int id, string email, string userFunction);
+
+
+
+        void Delete(int id);
+    }
+
+    public class AccountService : IAccountService
+    {
+        private static readonly ILog log = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
+        private readonly DataContext _context;
+        private readonly IMapper _mapper;
+        private readonly AppSettings _appSettings;
+        private readonly IEmailService _emailService;
+        static readonly object lockObject = new object();
+
+        public AccountService(
+            DataContext context,
+            IMapper mapper,
+            IOptions<AppSettings> appSettings,
+            IEmailService emailService)
+        {
+            _context = context;
+            _mapper = mapper;
+            _appSettings = appSettings.Value;
+            _emailService = emailService;
+        }
+
+        public AuthenticateResponse Authenticate(AuthenticateRequest model, string ipAddress)
+        {
+            var account = _context.Accounts.SingleOrDefault(x => x.Email == model.Email);
+
+            if (account == null || !account.IsVerified || !BC.Verify(model.Password, account.PasswordHash))
+                throw new AppException("Email or password is incorrect");
+
+            // authentication successful so generate jwt and refresh tokens
+            var jwtToken = generateJwtToken(account);
+
+            var refreshToken = generateRefreshToken(ipAddress);
+            account.RefreshTokens.Add(refreshToken);
+
+            // remove old refresh tokens from account
+            removeOldRefreshTokens(account);
+
+            // save changes to db
+            _context.Update(account);
+            _context.SaveChanges();
+
+            var response = _mapper.Map<AuthenticateResponse>(account);
+            response.JwtToken = jwtToken;
+            response.RefreshToken = refreshToken.Token;
+            return response;
+        }
+
+        public AuthenticateResponse RefreshToken(string token, string ipAddress)
+        {
+            var (refreshToken, account) = getRefreshToken(token);
+
+            // replace old refresh token with a new one and save
+            var newRefreshToken = generateRefreshToken(ipAddress);
+            refreshToken.Revoked = DateTime.UtcNow;
+            refreshToken.RevokedByIp = ipAddress;
+            refreshToken.ReplacedByToken = newRefreshToken.Token;
+            account.RefreshTokens.Add(newRefreshToken);
+
+            removeOldRefreshTokens(account);
+
+            _context.Update(account);
+            _context.SaveChanges();
+
+            // generate new jwt
+            var jwtToken = generateJwtToken(account);
+
+            var response = _mapper.Map<AuthenticateResponse>(account);
+            response.JwtToken = jwtToken;
+            response.RefreshToken = newRefreshToken.Token;
+            return response;
+        }
+
+        public void RevokeToken(string token, string ipAddress)
+        {
+            var (refreshToken, account) = getRefreshToken(token);
+
+            // revoke token and save
+            refreshToken.Revoked = DateTime.UtcNow;
+            refreshToken.RevokedByIp = ipAddress;
+            _context.Update(account);
+            _context.SaveChanges();
+        }
+
+        public void Register(RegisterRequest model, string origin)
+        {
+            // validate
+            if (_context.Accounts.Any(x => x.Email == model.Email))
+            {
+                // send already registered error in email to prevent account enumeration
+                sendAlreadyRegisteredEmail(model.Email, origin);
+                return;
+            }
+
+            // map model to new account object
+            var account = _mapper.Map<Account>(model);
+
+            // first registered account is an admin
+            var isFirstAccount = _context.Accounts.Count() == 0;
+            account.Role = isFirstAccount ? Role.Admin : Role.User;
+            account.Created = DateTime.UtcNow;
+            account.VerificationToken = randomTokenString();
+
+            // JD
+            //account.Verified = DateTime.UtcNow;
+            //account.VerificationToken = null;
+
+            // JD
+
+            // hash password
+            account.PasswordHash = BC.HashPassword(model.Password);
+
+            // save account
+            _context.Accounts.Add(account);
+            _context.SaveChanges();
+
+            // send email
+            sendVerificationEmail(account, origin);
+        }
+
+        public void VerifyEmail(string token)
+        {
+            var account = _context.Accounts.SingleOrDefault(x => x.VerificationToken == token);
+
+            if (account == null) throw new AppException("Verification failed");
+
+            account.Verified = DateTime.UtcNow;
+            account.VerificationToken = null;
+
+            _context.Accounts.Update(account);
+            _context.SaveChanges();
+        }
+
+        public void ForgotPassword(ForgotPasswordRequest model, string origin)
+        {
+            var account = _context.Accounts.SingleOrDefault(x => x.Email == model.Email);
+
+            // always return ok response to prevent email enumeration
+            if (account == null) return;
+
+            // create reset token that expires after 1 day
+            account.ResetToken = randomTokenString();
+            account.ResetTokenExpires = DateTime.UtcNow.AddDays(1);
+
+            _context.Accounts.Update(account);
+            _context.SaveChanges();
+
+            // send email
+            sendPasswordResetEmail(account, origin);
+        }
+
+        public void ValidateResetToken(ValidateResetTokenRequest model)
+        {
+            var account = _context.Accounts.SingleOrDefault(x =>
+                x.ResetToken == model.Token &&
+                x.ResetTokenExpires > DateTime.UtcNow);
+
+            if (account == null)
+                throw new AppException("Invalid token");
+        }
+
+        public void ResetPassword(ResetPasswordRequest model)
+        {
+            var account = _context.Accounts.SingleOrDefault(x =>
+                x.ResetToken == model.Token &&
+                x.ResetTokenExpires > DateTime.UtcNow);
+
+            if (account == null)
+                throw new AppException("Invalid token");
+
+            // update password and remove reset token
+            account.PasswordHash = BC.HashPassword(model.Password);
+            account.PasswordReset = DateTime.UtcNow;
+            account.ResetToken = null;
+            account.ResetTokenExpires = null;
+
+            _context.Accounts.Update(account);
+            _context.SaveChanges();
+        }
+
+        public IEnumerable<AccountResponse> GetAll()
+        {
+            var accounts = _context.Accounts;
+            return _mapper.Map<IList<AccountResponse>>(accounts);
+        }
+
+        public ScheduleDateTimeResponse GetAllDates()
+        {
+            ScheduleDateTimeResponse response = new ScheduleDateTimeResponse();
+            response.ScheduleDateTimes = new List<ScheduleDateTime>();
+
+            var accounts = _context.Accounts;
+            var accountAll = _context.Accounts.Include(x => x.Schedules).ToList();
+            foreach (var item in accountAll)
+            {
+                foreach (var schedule in item.Schedules)
+                {
+                    Boolean found = false;
+                    foreach (var dt in response.ScheduleDateTimes)
+                    {
+                        if (dt.Date == schedule.Date)
+                        {
+                            found = true; // DateTime already exists - break the for loop
+                            break;
+                        }
+                    }
+                    if (!found)
+                    {
+                        ScheduleDateTime sdt = new ScheduleDateTime();
+                        sdt.Date = schedule.Date;
+                        response.ScheduleDateTimes.Add(sdt);
+                    }
+                }
+            }
+            return response;
+        }
+
+        public DateFunctionTeamResponse GetTeamsByFunctionForDate(string dateStr)
+        {
+            var accountAll = _context.Accounts.Include(x => x.Schedules).ToList();
+            var dateTime = DateTime.Parse(dateStr);
+            DateFunctionTeamResponse response = new DateFunctionTeamResponse();
+            response.DateFunctionTeams = new List<DateFunctionTeam>();
+
+            foreach (var account in accountAll)
+            {
+                foreach (var schedule in account.Schedules)
+                {
+                    DateFunctionTeam team = null;
+                        
+                    if (schedule.Date == dateTime)
+                    {
+                        // Find existing team for the date and function
+                        foreach (var item in response.DateFunctionTeams)
+                        {
+                            if (schedule.Date == item.Date && item.Function == schedule.UserFunction)
+                            {
+                                team = item;
+                                break;
+                            }
+                        }
+                        if(team == null)
+                        {
+                            team = new DateFunctionTeam(dateTime, schedule.UserFunction);
+                            response.DateFunctionTeams.Add(team);
+                        }
+
+                        User user = new User();
+                        user = _mapper.Map<User>(account);
+                        user.Function = schedule.UserFunction;
+                        user.UserAvailability = schedule.UserAvailability;
+                        team.Users.Add(user);
+                    }
+                }
+            }
+            return response;
+        }
+        public AccountResponse GetById(int id)
+        {
+            var account = getAccount(id);
+
+            return _mapper.Map<AccountResponse>(account);
+        }
+
+        public AccountResponse Create(CreateRequest model)
+        {
+            log.InfoFormat(Thread.CurrentThread.Name + "Entering critical section");
+            Monitor.Enter(lockObject);
+            try
+            {
+                // validate
+                if (_context.Accounts.Any(x => x.Email == model.Email))
+                    throw new AppException($"Email '{model.Email}' is already registered");
+
+                // map model to new account object
+                var account = _mapper.Map<Account>(model);
+                account.Created = DateTime.UtcNow;
+                account.Verified = DateTime.UtcNow;
+
+                // hash password
+                account.PasswordHash = BC.HashPassword(model.Password);
+
+                // save account
+                _context.Accounts.Add(account);
+                _context.SaveChanges();
+
+                return _mapper.Map<AccountResponse>(account);
+            }
+            finally
+            {
+                Monitor.Exit(lockObject);
+                Console.WriteLine(Thread.CurrentThread.Name + " Exit from critical section");
+            }
+
+        }
+
+        public AccountResponse Update(int id, UpdateRequest model)
+        {
+            log.InfoFormat(Thread.CurrentThread.Name + "Entering critical section");
+            Monitor.Enter(lockObject);
+            try
+            {
+                var account = getAccount(id);
+                // validate
+                if (account.Email != model.Email && _context.Accounts.Any(x => x.Email == model.Email))
+                    throw new AppException($"Email '{model.Email}' is already taken");
+
+                // hash password if it was entered
+                if (!string.IsNullOrEmpty(model.Password))
+                    account.PasswordHash = BC.HashPassword(model.Password);
+
+                _mapper.Map(model, account);
+
+                account.Updated = DateTime.UtcNow;
+                _context.Accounts.Update(account);
+                _context.SaveChanges();
+
+                return _mapper.Map<AccountResponse>(account);
+            }
+            finally
+            {
+                Monitor.Exit(lockObject);
+                Console.WriteLine(Thread.CurrentThread.Name + " Exit from critical section");
+            }
+
+        }
+        public AccountResponse DeleteSchedule(int id, UpdateScheduleRequest scheduleReq)
+        {
+            log.InfoFormat(Thread.CurrentThread.Name + "Entering critical section");
+            Monitor.Enter(lockObject);
+            try
+            {
+                var account = getAccount(id);
+
+                Schedule toRemove = null;
+
+                foreach (var item in account.Schedules)
+                {
+                    if (DateTime.Compare(item.Date, scheduleReq.Date) == 0 && item.UserFunction == scheduleReq.UserFunction)
+                    {
+                        toRemove = item;
+                        break; // Found
+                    }
+                }
+                if (toRemove != null)
+                {
+                    _context.Schedules.RemoveRange(toRemove);
+                }
+
+                account.Updated = DateTime.UtcNow;
+                _context.SaveChanges();
+
+                return _mapper.Map<AccountResponse>(account);
+            }
+            finally
+            {
+                Monitor.Exit(lockObject);
+                Console.WriteLine(Thread.CurrentThread.Name + " Exit from critical section");
+            }
+        }
+
+        public AccountResponse AddSchedule(int id, UpdateScheduleRequest scheduleReq)
+        {
+            log.InfoFormat(Thread.CurrentThread.Name + "Entering critical section");
+            Monitor.Enter(lockObject);
+            try
+            {
+                var account = getAccount(id);
+                var newSchedule = new Schedule();
+                newSchedule = _mapper.Map<Schedule>(scheduleReq);
+                account.Schedules.Add(newSchedule);
+                _context.Accounts.Update(account);
+                _context.SaveChanges();
+
+                return _mapper.Map<AccountResponse>(account);
+            }
+            finally
+            {
+                Monitor.Exit(lockObject);
+                Console.WriteLine(Thread.CurrentThread.Name + " Exit from critical section");
+            }
+        }
+        public AccountResponse DeleteFunction(int id, UpdateUserFunctionRequest functionReq)
+        {
+            log.InfoFormat(Thread.CurrentThread.Name + "Entering critical section");
+            Monitor.Enter(lockObject);
+            try
+            {
+                var account = getAccount(id);
+
+                Function toRemove = null;
+                // Purge all schedules & UserFunctions  - we don't know which were changed
+                foreach (var item in account.UserFunctions)
+                {
+                    if (item.UserFunction == functionReq.UserFunction)
+                    {
+                        toRemove = item;
+                        break; // Found
+                    }
+                }
+                if (toRemove != null)
+                {
+                    _context.UserFunctions.RemoveRange(toRemove);
+                    _context.SaveChanges();
+                }
+
+                account.Updated = DateTime.UtcNow;
+
+                return _mapper.Map<AccountResponse>(account);
+            }
+            finally
+            {
+                Monitor.Exit(lockObject);
+                Console.WriteLine(Thread.CurrentThread.Name + " Exit from critical section");
+            }
+
+        }
+
+        public AccountResponse AddFunction(int id, UpdateUserFunctionRequest functionReq)
+        {
+            log.InfoFormat(Thread.CurrentThread.Name + "Entering critical section");
+            Monitor.Enter(lockObject);
+            try
+            {
+                var account = getAccount(id);
+                var newFunction = new Function();
+                newFunction = _mapper.Map<Function>(functionReq);
+                account.UserFunctions.Add(newFunction);
+                _context.Accounts.Update(account);
+                _context.SaveChanges();
+
+                return _mapper.Map<AccountResponse>(account);
+            }
+            finally
+            {
+                Monitor.Exit(lockObject);
+                Console.WriteLine(Thread.CurrentThread.Name + " Exit from critical section");
+            }
+        }
+
+        /*
+        User functions
+        */
+        public AccountResponse MoveSchedule2Pool(int id, UpdateScheduleRequest scheduleReq)
+        {
+            var autEmail = bool.Parse(_appSettings.autoEmail);
+
+            var account = getAccount(id);
+            log.InfoFormat("MoveSchedule2Pool before locking for {0}. Date {1} function {2}",
+                account.FirstName, scheduleReq.Date, scheduleReq.UserFunction);
+            Monitor.Enter(lockObject);
+            try
+            {
+
+                Schedule toRemove = null;
+
+                foreach (var item in account.Schedules)
+                {
+
+                    if (DateTime.Compare(item.Date, scheduleReq.Date) == 0 && item.UserFunction == scheduleReq.UserFunction)
+                    {
+                        toRemove = item;
+                        break; // Found
+                    }
+                }
+                if (toRemove != null)
+                {
+                    log.Info("MoveSchedule2Pool putting: " + scheduleReq.UserFunction + " to pool");
+                    PushToPool(account, scheduleReq);
+
+                    account.Schedules.Remove(toRemove);
+                    _context.Schedules.RemoveRange(toRemove); // To remove from DB
+                    account.Updated = DateTime.UtcNow;
+                    _context.Accounts.Update(account);
+                    _context.SaveChanges();
+
+                    if (autEmail)
+                    {
+                        SendEmail2AllRoles(account, toRemove);
+                    }
+                }
+                else
+                {
+                    log.WarnFormat("Schedule did not exist in the schdule list for {0}. Date {1} function {2}",
+                        account.FirstName, scheduleReq.Date, scheduleReq.UserFunction);
+                }
+            }
+            finally
+            {
+                Monitor.Exit(lockObject);
+                Console.WriteLine(Thread.CurrentThread.Name + " Exit from critical section");
+            }
+            log.Info("MoveSchedule2Pool after locking");
+
+            return _mapper.Map<AccountResponse>(account);
+        }
+
+        public AccountResponse GetScheduleFromPool(int id, UpdateScheduleRequest scheduleReq)
+        {
+            var account = getAccount(id);
+
+            log.Info("GetScheduleFromPool before locking");
+            Monitor.Enter(lockObject);
+
+            try
+            {
+                log.Info("MoveSchedule2Pool removing: " + scheduleReq.UserFunction + " from pool");
+                var poolElement = PopFromPool(account, scheduleReq);
+
+                if (poolElement != null)
+                {
+                    // Schedule not found in the current schedules - create one
+                    Schedule schedule = new Schedule();
+                    schedule.Date = poolElement.Date;
+                    schedule.UserFunction = poolElement.UserFunction;
+                    schedule.UserAvailability = scheduleReq.UserAvailability;
+                    schedule.Required = scheduleReq.Required;
+
+
+                    account.Schedules.Add(schedule);
+                    _context.Accounts.Update(account);
+                    _context.SaveChanges();
+                }
+                else
+                {
+                    // Pool element not found - do nothing for now
+                    log.Info("GetScheduleFromPool got NULL from Pool elements");
+                    account = null;
+                    throw new AppException("The schedule has been already taken");
+                }
+            }
+            finally
+            {
+                Monitor.Exit(lockObject);
+                Console.WriteLine(Thread.CurrentThread.Name + " Exit from critical section");
+            }
+            log.Info("GetScheduleFromPool after locking");
+
+            return _mapper.Map<AccountResponse>(account);
+        }
+        public SchedulePoolElementsResponse GetAllAvailableSchedules()
+        {
+            SchedulePoolElementsResponse response = new SchedulePoolElementsResponse();
+            log.Info("GetAllAvailableSchedules before locking");
+            Monitor.Enter(lockObject);
+            try
+            {
+                response.SchedulePoolElements = _context.SchedulePoolElements.ToList();
+            }
+            finally
+            {
+                Monitor.Exit(lockObject);
+                log.Info("GetAllAvailableSchedules after locking");
+            }
+
+            return response;
+        }
+
+        public SchedulePoolElementsResponse GetAvailableSchedules(int id)
+        {
+            var account = getAccount(id);
+            SchedulePoolElementsResponse response = new SchedulePoolElementsResponse();
+            log.Info("GetAvailableSchedules before locking");
+            Monitor.Enter(lockObject);
+            try
+            {
+                List<SchedulePoolElement> list = new List<SchedulePoolElement>();
+
+                foreach (var poolElement in _context.SchedulePoolElements.ToList())
+                {
+                    foreach (var function in account.UserFunctions)
+                    {
+                        if (function.UserFunction == poolElement.UserFunction)
+                        {
+                            list.Add(poolElement);
+                            break;
+                        }
+                    }
+                }
+                response.SchedulePoolElements = list;
+            }
+            finally
+            {
+                Monitor.Exit(lockObject);
+                log.Info("GetAvailableSchedules after locking");
+            }
+            return response;
+        }
+        public SchedulePoolElement RemoveFromPool(int id, string email, string userFunction)
+        {
+            log.Info("GetScheduleFromPool before locking");
+            Monitor.Enter(lockObject);
+
+            try
+            {
+                var schedulePoolAll = _context.SchedulePoolElements.ToList();
+                SchedulePoolElement poolElement = null;
+                foreach (var elem in schedulePoolAll)
+                {
+                    if (id == elem.Id && email == elem.Email && userFunction == elem.UserFunction)
+                    {
+                        poolElement = elem;
+                        break;
+                    }
+                }
+                if (poolElement != null)
+                {
+                    _context.SchedulePoolElements.Remove(poolElement);
+                    _context.SaveChanges();
+                    return poolElement;
+                }
+                else
+                {
+                    return null;
+                }
+            }
+            finally
+            {
+                Monitor.Exit(lockObject);
+                log.Info("GetScheduleFromPool after locking");
+            } 
+        }
+
+        public SchedulePoolElement PopFromPool(Account account, UpdateScheduleRequest item)
+        {
+            var schedulePoolAll = _context.SchedulePoolElements.ToList();
+            SchedulePoolElement poolElement = null;
+            foreach (var elem in schedulePoolAll)
+            {
+                // 
+                if (item.Date == elem.Date && /* account.Email == elem.Email && */ item.UserFunction == elem.UserFunction)
+                {
+                    poolElement = elem;
+                    break;
+                }
+            }
+            if (poolElement != null)
+            {
+                _context.SchedulePoolElements.Remove(poolElement);
+                _context.SaveChanges();
+                return poolElement;
+            }
+            else
+            {
+                return null;
+            }
+        }
+
+        public void PushToPool(Account account, UpdateScheduleRequest item)
+        {
+            // var schedulePoolAll = _context.SchedulePoolElements.ToList();
+            // bool found = false;
+            // foreach (var elem in schedulePoolAll)
+            // {
+            //     if (item.Date == elem.Date && /* account.Email == elem.Email &&  */item.UserFunction == elem.UserFunction)
+            //     {
+            //         found = true;
+            //         break;
+            //     }
+            // }
+            var newPoolElement = new SchedulePoolElement();
+            newPoolElement = _mapper.Map<SchedulePoolElement>(item);
+            newPoolElement.Email = account.Email;
+            _context.SchedulePoolElements.Add(newPoolElement);
+            _context.SaveChanges();
+        }
+        public void SendEmail2AllRoles(Account a, Schedule schedule)
+        {
+            string message = schedule.UserFunction + " " + a.FirstName + " "
+                + a.LastName + " is unable to attend their duties on " + schedule.Date;
+            var accountAll = _context.Accounts.ToList();
+            foreach (var account in accountAll)
+            {
+                foreach (var f in account.UserFunctions)
+                {
+                    if (f.UserFunction == schedule.UserFunction)
+                    {
+                        _emailService.Send(
+                            to: account.Email,
+                            subject: $@"{f.UserFunction}" + " is needed",
+                            html: $@"<i>{a.FirstName} {a.LastName}</i> is unable to attend their duties on " + schedule.Date
+
+                        );
+                        log.Info("Message sent: " + message);
+                        break;
+                    }
+                }
+            }
+        }
+        public void Delete(int id)
+        {
+
+            var account = getAccount(id);
+
+            // Purge all schedules for the account
+            foreach (var item in account.Schedules)
+            {
+                _context.Schedules.Remove(item);
+            }
+            foreach (var item in account.UserFunctions)
+            {
+                _context.UserFunctions.Remove(item);
+            }
+
+            _context.Accounts.Remove(account);
+            _context.SaveChanges();
+        }
+
+        // helper methods
+
+        private Account getAccount(int id)
+        {
+            Account account = null;
+            var accountAll = _context.Accounts.Include(x => x.Schedules).Include(x => x.UserFunctions)
+                    .ToList();
+            account = accountAll.Find(x => x.Id == id);
+            if (account == null) throw new KeyNotFoundException("Account not found");
+            return account;
+        }
+
+        private (RefreshToken, Account) getRefreshToken(string token)
+        {
+
+            var account = _context.Accounts.SingleOrDefault(u => u.RefreshTokens.Any(t => t.Token == token));
+            if (account == null)
+            {
+                Console.WriteLine("Exception thrown");
+                throw new AppException("Invalid token");
+            }
+            var refreshToken = account.RefreshTokens.Single(x => x.Token == token);
+            if (!refreshToken.IsActive) throw new AppException("Invalid token");
+            return (refreshToken, account);
+        }
+
+        private string generateJwtToken(Account account)
+        {
+            var tokenHandler = new JwtSecurityTokenHandler();
+            var key = Encoding.ASCII.GetBytes(_appSettings.Secret);
+            var tokenDescriptor = new SecurityTokenDescriptor
+            {
+                Subject = new ClaimsIdentity(new[] { new Claim("id", account.Id.ToString()) }),
+                Expires = DateTime.UtcNow.AddMinutes(15),
+                SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
+            };
+            var token = tokenHandler.CreateToken(tokenDescriptor) as JwtSecurityToken;
+
+            // JD
+            var tokenExp = token.Claims.First(claim => claim.Type.Equals("exp")).Value;
+            var ticks = long.Parse(tokenExp);
+            var tokenDate = DateTimeOffset.FromUnixTimeSeconds(ticks).UtcDateTime;
+            var Expires = DateTime.Now.AddMinutes(15);
+            //log.Info("JWT expiration date for : " + account.FirstName + + tokenDate.ToLocalTime().ToString());
+            log.InfoFormat("JWT Next expiration date for {0} {1} is {2}", account.FirstName, account.LastName, tokenDate.ToLocalTime().ToString());
+            // JD
+            return tokenHandler.WriteToken(token);
+        }
+        /* JD Test*/
+        public Task<string> GetJWTToken(string user)
+        {
+
+            var now = DateTime.UtcNow;
+            //constructing part 1: header.Encode()
+            JwtHeader jwtHeader = new JwtHeader();
+            var sha512 = new HMACSHA512();
+            jwtHeader.Add("alg", sha512);
+            var partOne = jwtHeader.Base64UrlEncode();
+
+            //constructing part 2: payload.Encode  
+            JwtPayload payload = new JwtPayload();
+            payload.Add("sub", user);
+            payload.Add("exp", ConvertToUnixTimestamp(now.AddMinutes(15)));
+            payload.Add("nbf", ConvertToUnixTimestamp(now));
+            payload.Add("iat", ConvertToUnixTimestamp(now));
+            var partTwo = payload.Base64UrlEncode();
+
+            //constructing part 3: HS512(part1 + "." + part2, key)
+            var tobeHashed = string.Join(".", partOne, partTwo);
+            var sha = new HMACSHA512(Encoding.UTF8.GetBytes(_appSettings.Secret));
+            var hashedByteArray = sha.ComputeHash(Encoding.UTF8.GetBytes(tobeHashed));
+
+            //You need to base64UrlEncode the signature hash value
+            var partThree = Base64UrlEncode(hashedByteArray);
+
+            //Now construct the token
+            var tokenString = string.Join(".", tobeHashed, partThree);
+
+            //await was not used so no need for `async` keyword. Just return task
+            return Task.FromResult(tokenString);
+        }
+        public static double ConvertToUnixTimestamp(DateTime date)
+        {
+            DateTime origin = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);
+            TimeSpan diff = date.ToUniversalTime() - origin;
+            return Math.Floor(diff.TotalSeconds);
+        }
+        // from JWT spec
+        private static string Base64UrlEncode(byte[] input)
+        {
+            var output = Convert.ToBase64String(input);
+            output = output.Split('=')[0]; // Remove any trailing '='s
+            output = output.Replace('+', '-'); // 62nd char of encoding
+            output = output.Replace('/', '_'); // 63rd char of encoding
+            return output;
+        }
+
+
+        private RefreshToken generateRefreshToken(string ipAddress)
+        {
+            return new RefreshToken
+            {
+                Token = randomTokenString(),
+                Expires = DateTime.UtcNow.AddDays(7),
+                Created = DateTime.UtcNow,
+                CreatedByIp = ipAddress
+            };
+        }
+
+        private void removeOldRefreshTokens(Account account)
+        {
+            account.RefreshTokens.RemoveAll(x =>
+                !x.IsActive &&
+                x.Created.AddDays(_appSettings.RefreshTokenTTL) <= DateTime.UtcNow);
+        }
+
+        private string randomTokenString()
+        {
+            using var rngCryptoServiceProvider = new RNGCryptoServiceProvider();
+            var randomBytes = new byte[40];
+            rngCryptoServiceProvider.GetBytes(randomBytes);
+            // convert random bytes to hex string
+            return BitConverter.ToString(randomBytes).Replace("-", "");
+        }
+
+        private void sendVerificationEmail(Account account, string origin)
+        {
+            string message;
+            if (!string.IsNullOrEmpty(origin))
+            {
+                var verifyUrl = $"{origin}/account/verify-email?token={account.VerificationToken}";
+                message = $@"<p>Please click the below link to verify your email address:</p>
+                             <p><a href=""{verifyUrl}"">{verifyUrl}</a></p>";
+            }
+            else
+            {
+                message = $@"<p>Please use the below token to verify your email address with the <code>/accounts/verify-email</code> api route:</p>
+                             <p><code>{account.VerificationToken}</code></p>";
+            }
+
+            _emailService.Send(
+                to: account.Email,
+                subject: "Sign-up Verification API - Verify Email",
+                html: $@"<h4>Verify Email</h4>
+                         <p>Thanks for registering!</p>
+                         {message}"
+            );
+        }
+
+        private void sendAlreadyRegisteredEmail(string email, string origin)
+        {
+            string message;
+            if (!string.IsNullOrEmpty(origin))
+                message = $@"<p>If you don't know your password please visit the <a href=""{origin}/account/forgot-password"">forgot password</a> page.</p>";
+            else
+                message = "<p>If you don't know your password you can reset it via the <code>/accounts/forgot-password</code> api route.</p>";
+
+            _emailService.Send(
+                to: email,
+                subject: "Sign-up Verification API - Email Already Registered",
+                html: $@"<h4>Email Already Registered</h4>
+                         <p>Your email <strong>{email}</strong> is already registered.</p>
+                         {message}"
+            );
+        }
+
+
+        private void sendPasswordResetEmail(Account account, string origin)
+        {
+            string message;
+            if (!string.IsNullOrEmpty(origin))
+            {
+                var resetUrl = $"{origin}/account/reset-password?token={account.ResetToken}";
+                message = $@"<p>Please click the below link to reset your password, the link will be valid for 1 day:</p>
+                             <p><a href=""{resetUrl}"">{resetUrl}</a></p>";
+            }
+            else
+            {
+                message = $@"<p>Please use the below token to reset your password with the <code>/accounts/reset-password</code> api route:</p>
+                             <p><code>{account.ResetToken}</code></p>";
+            }
+
+            _emailService.Send(
+                to: account.Email,
+                subject: "Sign-up Verification API - Reset Password",
+                html: $@"<h4>Reset Password Email</h4>
+                         {message}"
+            );
+        }
+    }
+}
