@@ -53,5 +53,5 @@ jobs:
         with:
           app-name: 'SchedulerBackEnd'
           slot-name: 'Production'
-          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_E4914FECCBAE4B90A726DC0C7DE3A18A }}
+          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_2D3C6441AB4641009AC519DCB67F4A10 }}
           package: .
