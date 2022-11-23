@@ -41,7 +41,7 @@ namespace WebApi.Services
             }
             catch (System.Exception ex)
             {
-                throw new AppException("There was a problem sending e-mail.") ;
+                throw new AppException("There was a problem sending e-mail.Reason: " + ex.Message) ;
             }
         }
     }

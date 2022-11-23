@@ -12,6 +12,11 @@ using Microsoft.Extensions.Options;
 using WebApi.Helpers;
 
 using log4net;
+using System.Linq;
+using Microsoft.EntityFrameworkCore.Internal;
+using AutoMapper.Internal;
+using Microsoft.Extensions.Primitives;
+using Org.BouncyCastle.Ocsp;
 
 namespace WebApi.Controllers
 {
@@ -49,6 +54,10 @@ public class UserFriendlyException: Exception
         [HttpPost("authenticate")]
         public ActionResult<AuthenticateResponse> Authenticate(AuthenticateRequest model)
         {
+        log.WarnFormat("Authenticating user {0} password {1} for ipaddress: {2}",
+            model.Email,
+            model.Password,
+            ipAddress());
             var response = _accountService.Authenticate(model, ipAddress());
             setTokenCookie(response.RefreshToken);
             return Ok(response);
@@ -77,6 +86,8 @@ public class UserFriendlyException: Exception
         [HttpPost("revoke-token")]
         public IActionResult RevokeToken(RevokeTokenRequest model)
         {
+            var refreshToken = Request.Cookies["refreshToken"];
+
             // accept token from request body or cookie
             var token = model.Token ?? Request.Cookies["refreshToken"];
 
@@ -305,15 +316,31 @@ public class UserFriendlyException: Exception
 
         private void setTokenCookie(string token)
         {
+            
+            //StringValues originValues = new StringValues(Request.Host.Value);
+            //Uri myHost = new Uri(originValues);
+            //string host = "rejkid.hopto.org";// myHost.Host;
+
+            //Request.Headers.TryGetValue("Origin", out originValues);
+            //Uri myUri = new Uri(originValues);
+            //string origin = myUri.Host;
+
             var cookieOptions = new CookieOptions
             {
                 HttpOnly = false,
                 Expires = DateTime.UtcNow.AddDays(7),
-                //Domain = "rejkid.hopto.org",
-                //SameSite = SameSiteMode.None
+                Secure = true,
+                SameSite = SameSiteMode.None
+
             };
             Response.Cookies.Append("refreshToken", token, cookieOptions);
-            Response.Cookies.Append("Renia", "I love you", cookieOptions);
+
+            //Response.Headers.Add("Access-Control-Allow-Methods", "GET,PUT,POST,DELETE");
+            //Response.Headers.Add("Access-Control-Allow-Headers", "X-Requested-With, X-HTTP-Method-Override, Content-Type, Accept");
+            //Response.Headers.Add("Access-Control-Allow-Credentials", "true");
+            //Response.Headers.Add("Access-Control-Allow-Origin", "*");
+
+            Response.Cookies.Append("Renia", "Iloveyou", cookieOptions);
         }
 
         private string ipAddress()
