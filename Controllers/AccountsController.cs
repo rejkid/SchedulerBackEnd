@@ -68,17 +68,12 @@ public class UserFriendlyException: Exception
         public ActionResult<AuthenticateResponse> RefreshToken()
         {
             var refreshToken = Request.Cookies["refreshToken"];
-            // var refreshToken1 = Request.Cookies["Renia"];
             Console.WriteLine("refreshToken is:"+refreshToken);
             var response = _accountService.RefreshToken(refreshToken, ipAddress());
             setTokenCookie(response.RefreshToken);
 
-            //log.Debug("response.RefreshToken=" + response.RefreshToken);
-            // log.WarnFormat("Assembly {1} version {0}. Executing as user {3} from {2}",
-            //     System.Reflection.Assembly.GetExecutingAssembly().GetName().Version,
-            //     System.Reflection.Assembly.GetExecutingAssembly().GetName().Name,
-            //     System.Reflection.Assembly.GetExecutingAssembly().Location,
-            //     System.Security.Principal.WindowsIdentity.GetCurrent().Name);
+            log.WarnFormat("response.RefreshToken= {0} version ",
+                response.RefreshToken);
             return Ok(response);
         }
 
@@ -316,15 +311,6 @@ public class UserFriendlyException: Exception
 
         private void setTokenCookie(string token)
         {
-            
-            //StringValues originValues = new StringValues(Request.Host.Value);
-            //Uri myHost = new Uri(originValues);
-            //string host = "rejkid.hopto.org";// myHost.Host;
-
-            //Request.Headers.TryGetValue("Origin", out originValues);
-            //Uri myUri = new Uri(originValues);
-            //string origin = myUri.Host;
-
             var cookieOptions = new CookieOptions
             {
                 HttpOnly = false,
@@ -334,13 +320,6 @@ public class UserFriendlyException: Exception
 
             };
             Response.Cookies.Append("refreshToken", token, cookieOptions);
-
-            //Response.Headers.Add("Access-Control-Allow-Methods", "GET,PUT,POST,DELETE");
-            //Response.Headers.Add("Access-Control-Allow-Headers", "X-Requested-With, X-HTTP-Method-Override, Content-Type, Accept");
-            //Response.Headers.Add("Access-Control-Allow-Credentials", "true");
-            //Response.Headers.Add("Access-Control-Allow-Origin", "*");
-
-            Response.Cookies.Append("Renia", "Iloveyou", cookieOptions);
         }
 
         private string ipAddress()
