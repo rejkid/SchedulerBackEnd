@@ -19,6 +19,8 @@ using Microsoft.AspNetCore.WebUtilities;
 using System.Diagnostics;
 using System.Threading;
 using log4net;
+using Microsoft.EntityFrameworkCore.Storage;
+
 namespace WebApi.Services
 {
     public interface IAccountService
@@ -559,38 +561,46 @@ namespace WebApi.Services
 
             log.Info("GetScheduleFromPool before locking");
             Monitor.Enter(lockObject);
-
-            try
+            using (IDbContextTransaction transaction = _context.Database.BeginTransaction())
             {
-                log.Info("MoveSchedule2Pool removing: " + scheduleReq.UserFunction + " from pool");
-                var poolElement = PopFromPool(account, scheduleReq);
-
-                if (poolElement != null)
+                try
                 {
-                    // Schedule not found in the current schedules - create one
-                    Schedule schedule = new Schedule();
-                    schedule.Date = poolElement.Date;
-                    schedule.UserFunction = poolElement.UserFunction;
-                    schedule.UserAvailability = scheduleReq.UserAvailability;
-                    schedule.Required = scheduleReq.Required;
+                    log.Info("MoveSchedule2Pool removing: " + scheduleReq.UserFunction + " from pool");
+                    var poolElement = PopFromPool(account, scheduleReq);
+
+                    if (poolElement != null)
+                    {
+                        // Schedule not found in the current schedules - create one
+                        Schedule schedule = new Schedule();
+                        schedule.Date = poolElement.Date;
+                        schedule.UserFunction = poolElement.UserFunction;
+                        schedule.UserAvailability = scheduleReq.UserAvailability;
+                        schedule.Required = scheduleReq.Required;
 
 
-                    account.Schedules.Add(schedule);
-                    _context.Accounts.Update(account);
-                    _context.SaveChanges();
+                        account.Schedules.Add(schedule);
+                        _context.Accounts.Update(account);
+                        _context.SaveChanges();
+                    }
+                    else
+                    {
+                        // Pool element not found - do nothing for now
+                        log.Info("GetScheduleFromPool got NULL from Pool elements");
+                        account = null;
+                        throw new AppException("The schedule has been already taken");
+                    }
+                    transaction.Commit();
                 }
-                else
+                catch (Exception ex)
                 {
-                    // Pool element not found - do nothing for now
-                    log.Info("GetScheduleFromPool got NULL from Pool elements");
-                    account = null;
-                    throw new AppException("The schedule has been already taken");
+                    transaction.Rollback();
+                    Console.WriteLine(Thread.CurrentThread.Name + "Error occurred.");
                 }
-            }
-            finally
-            {
-                Monitor.Exit(lockObject);
-                Console.WriteLine(Thread.CurrentThread.Name + " Exit from critical section");
+                finally
+                {
+                    Monitor.Exit(lockObject);
+                    Console.WriteLine(Thread.CurrentThread.Name + " Exit from critical section");
+                }
             }
             log.Info("GetScheduleFromPool after locking");
 
