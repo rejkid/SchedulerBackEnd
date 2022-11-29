@@ -19,6 +19,7 @@ namespace WebApi
                         //.UseUrls("http://192.168.0.19:4000");
                         //.UseUrls("http://localhost:4000");
                         //.UseUrls("https://webapijanusz.azurewebsites.net:4000");
+                        //.UseUrls("https://localhost:4000");
                 });
     }
 }

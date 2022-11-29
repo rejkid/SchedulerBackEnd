@@ -82,419 +82,709 @@ namespace WebApi.Services
 
         public AuthenticateResponse Authenticate(AuthenticateRequest model, string ipAddress)
         {
-            var account = _context.Accounts.SingleOrDefault(x => x.Email == model.Email);
+            log.Info("Authenticate before locking");
+            Monitor.Enter(lockObject);
+            using (IDbContextTransaction transaction = _context.Database.BeginTransaction())
+            {
+                try
+                {
+                    var account = _context.Accounts.SingleOrDefault(x => x.Email == model.Email);
 
-            if (account == null || !account.IsVerified || !BC.Verify(model.Password, account.PasswordHash))
-                throw new AppException("Email or password is incorrect");
+                    if (account == null || !account.IsVerified || !BC.Verify(model.Password, account.PasswordHash))
+                        throw new AppException("Email or password is incorrect");
 
-            // authentication successful so generate jwt and refresh tokens
-            var jwtToken = generateJwtToken(account);
+                    // authentication successful so generate jwt and refresh tokens
+                    var jwtToken = generateJwtToken(account);
 
-            var refreshToken = generateRefreshToken(ipAddress);
-            account.RefreshTokens.Add(refreshToken);
+                    var refreshToken = generateRefreshToken(ipAddress);
+                    account.RefreshTokens.Add(refreshToken);
 
-            // remove old refresh tokens from account
-            removeOldRefreshTokens(account);
+                    // remove old refresh tokens from account
+                    removeOldRefreshTokens(account);
 
-            // save changes to db
-            _context.Update(account);
-            _context.SaveChanges();
+                    // save changes to db
+                    _context.Update(account);
+                    _context.SaveChanges();
+                    transaction.Commit();
 
-            var response = _mapper.Map<AuthenticateResponse>(account);
-            response.JwtToken = jwtToken;
-            response.RefreshToken = refreshToken.Token;
-            return response;
+                    var response = _mapper.Map<AuthenticateResponse>(account);
+                    response.JwtToken = jwtToken;
+                    response.RefreshToken = refreshToken.Token;
+                    return response;
+                }
+                catch (Exception ex)
+                {
+                    transaction.Rollback();
+                    Console.WriteLine(Thread.CurrentThread.Name + "Error occurred.");
+                    log.Error(Thread.CurrentThread.Name + "Error occurred.\n" + ex.Message);
+                    throw ex;
+                }
+                finally
+                {
+                    Monitor.Exit(lockObject);
+                    log.Info("Authenticate after locking");
+                }
+            }
         }
 
         public AuthenticateResponse RefreshToken(string token, string ipAddress)
         {
-            var (refreshToken, account) = getRefreshToken(token);
+            log.Info("RefreshToken before locking");
+            Monitor.Enter(lockObject);
 
-            // replace old refresh token with a new one and save
-            var newRefreshToken = generateRefreshToken(ipAddress);
-            refreshToken.Revoked = DateTime.UtcNow;
-            refreshToken.RevokedByIp = ipAddress;
-            refreshToken.ReplacedByToken = newRefreshToken.Token;
-            account.RefreshTokens.Add(newRefreshToken);
+            using (IDbContextTransaction transaction = _context.Database.BeginTransaction())
+            {
+                try
+                {
 
-            removeOldRefreshTokens(account);
+                    var (refreshToken, account) = getRefreshToken(token);
 
-            _context.Update(account);
-            _context.SaveChanges();
+                    // replace old refresh token with a new one and save
+                    var newRefreshToken = generateRefreshToken(ipAddress);
+                    refreshToken.Revoked = DateTime.UtcNow;
+                    refreshToken.RevokedByIp = ipAddress;
+                    refreshToken.ReplacedByToken = newRefreshToken.Token;
+                    account.RefreshTokens.Add(newRefreshToken);
 
-            // generate new jwt
-            var jwtToken = generateJwtToken(account);
+                    removeOldRefreshTokens(account);
 
-            var response = _mapper.Map<AuthenticateResponse>(account);
-            response.JwtToken = jwtToken;
-            response.RefreshToken = newRefreshToken.Token;
-            return response;
+                    _context.Update(account);
+                    _context.SaveChanges();
+                    transaction.Commit();
+
+                    // generate new jwt
+                    var jwtToken = generateJwtToken(account);
+
+                    var response = _mapper.Map<AuthenticateResponse>(account);
+                    response.JwtToken = jwtToken;
+                    response.RefreshToken = newRefreshToken.Token;
+                    return response;
+                }
+                catch (Exception ex)
+                {
+                    transaction.Rollback();
+                    Console.WriteLine(Thread.CurrentThread.Name + "Error occurred.");
+                    throw ex;
+                }
+                finally
+                {
+                    Monitor.Exit(lockObject);
+                    log.Info("RefreshToken after locking");
+                }
+            }
         }
 
         public void RevokeToken(string token, string ipAddress)
         {
-            var (refreshToken, account) = getRefreshToken(token);
+            log.Info("RevokeToken before locking");
+            Monitor.Enter(lockObject);
 
-            // revoke token and save
-            refreshToken.Revoked = DateTime.UtcNow;
-            refreshToken.RevokedByIp = ipAddress;
-            _context.Update(account);
-            _context.SaveChanges();
+            using (IDbContextTransaction transaction = _context.Database.BeginTransaction())
+            {
+                try
+                {
+                    var (refreshToken, account) = getRefreshToken(token);
+
+                    // revoke token and save
+                    refreshToken.Revoked = DateTime.UtcNow;
+                    refreshToken.RevokedByIp = ipAddress;
+                    _context.Update(account);
+                    _context.SaveChanges();
+                    transaction.Commit();
+                }
+                catch (Exception ex)
+                {
+                    transaction.Rollback();
+                    Console.WriteLine(Thread.CurrentThread.Name + "Error occurred.");
+                    throw ex;
+                }
+                finally
+                {
+                    Monitor.Exit(lockObject);
+                    log.Info("RevokeToken after locking");
+                }
+            }
         }
 
         public void Register(RegisterRequest model, string origin)
         {
-            // validate
-            if (_context.Accounts.Any(x => x.Email == model.Email))
+            log.Info("Register before locking");
+            Monitor.Enter(lockObject);
+
+            using (IDbContextTransaction transaction = _context.Database.BeginTransaction())
             {
-                // send already registered error in email to prevent account enumeration
-                sendAlreadyRegisteredEmail(model.Email, origin);
-                return;
+                try
+                {
+                    // validate
+                    if (_context.Accounts.Any(x => x.Email == model.Email))
+                    {
+                        // send already registered error in email to prevent account enumeration
+                        sendAlreadyRegisteredEmail(model.Email, origin);
+                        transaction.Commit();
+                        return;
+                    }
+
+                    // map model to new account object
+                    var account = _mapper.Map<Account>(model);
+
+                    // first registered account is an admin
+                    var isFirstAccount = _context.Accounts.Count() == 0;
+                    account.Role = isFirstAccount ? Role.Admin : Role.User;
+                    account.Created = DateTime.UtcNow;
+                    account.VerificationToken = randomTokenString();
+
+                    // hash password
+                    account.PasswordHash = BC.HashPassword(model.Password);
+
+                    // save account
+                    _context.Accounts.Add(account);
+                    _context.SaveChanges();
+                    transaction.Commit();
+
+                    // send email
+                    sendVerificationEmail(account, origin);
+                }
+                catch (Exception ex)
+                {
+                    transaction.Rollback();
+                    Console.WriteLine(Thread.CurrentThread.Name + "Error occurred.");
+                    throw ex;
+                }
+                finally
+                {
+                    Monitor.Exit(lockObject);
+                    log.Info("Register after locking");
+                }
             }
-
-            // map model to new account object
-            var account = _mapper.Map<Account>(model);
-
-            // first registered account is an admin
-            var isFirstAccount = _context.Accounts.Count() == 0;
-            account.Role = isFirstAccount ? Role.Admin : Role.User;
-            account.Created = DateTime.UtcNow;
-            account.VerificationToken = randomTokenString();
-
-            // JD
-            //account.Verified = DateTime.UtcNow;
-            //account.VerificationToken = null;
-
-            // JD
-
-            // hash password
-            account.PasswordHash = BC.HashPassword(model.Password);
-
-            // save account
-            _context.Accounts.Add(account);
-            _context.SaveChanges();
-
-            // send email
-            sendVerificationEmail(account, origin);
         }
 
         public void VerifyEmail(string token)
         {
-            var account = _context.Accounts.SingleOrDefault(x => x.VerificationToken == token);
+            log.Info("VerifyEmail before locking");
+            Monitor.Enter(lockObject);
 
-            if (account == null) throw new AppException("Verification failed");
+            using (IDbContextTransaction transaction = _context.Database.BeginTransaction())
+            {
+                try
+                {
+                    var account = _context.Accounts.SingleOrDefault(x => x.VerificationToken == token);
 
-            account.Verified = DateTime.UtcNow;
-            account.VerificationToken = null;
+                    if (account == null) throw new AppException("Verification failed");
 
-            _context.Accounts.Update(account);
-            _context.SaveChanges();
+                    account.Verified = DateTime.UtcNow;
+                    account.VerificationToken = null;
+
+                    _context.Accounts.Update(account);
+                    _context.SaveChanges();
+                    transaction.Commit();
+                }
+                catch (Exception ex)
+                {
+                    transaction.Rollback();
+                    Console.WriteLine(Thread.CurrentThread.Name + "Error occurred.");
+                    throw ex;
+                }
+                finally
+                {
+                    Monitor.Exit(lockObject);
+                    log.Info("VerifyEmail after locking");
+                }
+            }
         }
 
         public void ForgotPassword(ForgotPasswordRequest model, string origin)
         {
-            var account = _context.Accounts.SingleOrDefault(x => x.Email == model.Email);
+            log.Info("ForgotPassword before locking");
+            Monitor.Enter(lockObject);
 
-            // always return ok response to prevent email enumeration
-            if (account == null) return;
+            using (IDbContextTransaction transaction = _context.Database.BeginTransaction())
+            {
+                try
+                {
+                    var account = _context.Accounts.SingleOrDefault(x => x.Email == model.Email);
 
-            // create reset token that expires after 1 day
-            account.ResetToken = randomTokenString();
-            account.ResetTokenExpires = DateTime.UtcNow.AddDays(1);
+                    // always return ok response to prevent email enumeration
+                    if (account == null)
+                    {
+                        transaction.Commit();
+                        return;
+                    }
 
-            _context.Accounts.Update(account);
-            _context.SaveChanges();
+                    // create reset token that expires after 1 day
+                    account.ResetToken = randomTokenString();
+                    account.ResetTokenExpires = DateTime.UtcNow.AddDays(1);
 
-            // send email
-            sendPasswordResetEmail(account, origin);
+                    _context.Accounts.Update(account);
+                    _context.SaveChanges();
+                    transaction.Commit();
+
+                    // send email
+                    sendPasswordResetEmail(account, origin);
+                }
+                catch (Exception ex)
+                {
+                    transaction.Rollback();
+                    Console.WriteLine(Thread.CurrentThread.Name + "Error occurred.");
+                    throw ex;
+                }
+                finally
+                {
+                    Monitor.Exit(lockObject);
+                    log.Info("ForgotPassword after locking");
+                }
+            }
         }
 
         public void ValidateResetToken(ValidateResetTokenRequest model)
         {
-            var account = _context.Accounts.SingleOrDefault(x =>
+            log.Info("ValidateResetToken before locking");
+            Monitor.Enter(lockObject);
+            try
+            {
+                var account = _context.Accounts.SingleOrDefault(x =>
                 x.ResetToken == model.Token &&
                 x.ResetTokenExpires > DateTime.UtcNow);
 
-            if (account == null)
-                throw new AppException("Invalid token");
+                if (account == null)
+                    throw new AppException("Invalid token");
+            }
+            catch (Exception ex)
+            {
+
+                Console.WriteLine(Thread.CurrentThread.Name + "Error occurred.");
+                throw ex;
+            }
+            finally
+            {
+                Monitor.Exit(lockObject);
+                log.Info("ValidateResetToken after locking");
+            }
         }
 
         public void ResetPassword(ResetPasswordRequest model)
         {
-            var account = _context.Accounts.SingleOrDefault(x =>
-                x.ResetToken == model.Token &&
-                x.ResetTokenExpires > DateTime.UtcNow);
+            log.Info("ResetPassword before locking");
+            Monitor.Enter(lockObject);
 
-            if (account == null)
-                throw new AppException("Invalid token");
+            using (IDbContextTransaction transaction = _context.Database.BeginTransaction())
+            {
+                try
+                {
+                    var account = _context.Accounts.SingleOrDefault(x =>
+                        x.ResetToken == model.Token &&
+                        x.ResetTokenExpires > DateTime.UtcNow);
 
-            // update password and remove reset token
-            account.PasswordHash = BC.HashPassword(model.Password);
-            account.PasswordReset = DateTime.UtcNow;
-            account.ResetToken = null;
-            account.ResetTokenExpires = null;
+                    if (account == null)
+                        throw new AppException("Invalid token");
 
-            _context.Accounts.Update(account);
-            _context.SaveChanges();
+                    // update password and remove reset token
+                    account.PasswordHash = BC.HashPassword(model.Password);
+                    account.PasswordReset = DateTime.UtcNow;
+                    account.ResetToken = null;
+                    account.ResetTokenExpires = null;
+
+                    _context.Accounts.Update(account);
+                    _context.SaveChanges();
+                    transaction.Commit();
+                }
+                catch (Exception ex)
+                {
+                    transaction.Rollback();
+                    Console.WriteLine(Thread.CurrentThread.Name + "Error occurred.");
+                    throw ex;
+                }
+                finally
+                {
+                    Monitor.Exit(lockObject);
+                    log.Info("ResetPassword after locking");
+                }
+            }
         }
 
         public IEnumerable<AccountResponse> GetAll()
         {
-            var accounts = _context.Accounts;
-            return _mapper.Map<IList<AccountResponse>>(accounts);
+            log.Info("GetAll before locking");
+            Monitor.Enter(lockObject);
+
+            try
+            {
+                var accounts = _context.Accounts;
+                return _mapper.Map<IList<AccountResponse>>(accounts);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(Thread.CurrentThread.Name + "Error occurred.");
+                throw ex;
+            }
+            finally
+            {
+                Monitor.Exit(lockObject);
+                log.Info("GetAll after locking");
+            }
         }
 
         public ScheduleDateTimeResponse GetAllDates()
         {
-            ScheduleDateTimeResponse response = new ScheduleDateTimeResponse();
-            response.ScheduleDateTimes = new List<ScheduleDateTime>();
-
-            var accounts = _context.Accounts;
-            var accountAll = _context.Accounts.Include(x => x.Schedules).ToList();
-            foreach (var item in accountAll)
+            log.Info("GetAllDates before locking");
+            Monitor.Enter(lockObject);
+            try
             {
-                foreach (var schedule in item.Schedules)
+                ScheduleDateTimeResponse response = new ScheduleDateTimeResponse();
+                response.ScheduleDateTimes = new List<ScheduleDateTime>();
+
+                var accounts = _context.Accounts;
+                var accountAll = _context.Accounts.Include(x => x.Schedules).ToList();
+                foreach (var item in accountAll)
                 {
-                    Boolean found = false;
-                    foreach (var dt in response.ScheduleDateTimes)
+                    foreach (var schedule in item.Schedules)
                     {
-                        if (dt.Date == schedule.Date)
+                        Boolean found = false;
+                        foreach (var dt in response.ScheduleDateTimes)
                         {
-                            found = true; // DateTime already exists - break the for loop
-                            break;
+                            if (dt.Date == schedule.Date)
+                            {
+                                found = true; // DateTime already exists - break the for loop
+                                break;
+                            }
+                        }
+                        if (!found)
+                        {
+                            ScheduleDateTime sdt = new ScheduleDateTime();
+                            sdt.Date = schedule.Date;
+                            response.ScheduleDateTimes.Add(sdt);
                         }
                     }
-                    if (!found)
-                    {
-                        ScheduleDateTime sdt = new ScheduleDateTime();
-                        sdt.Date = schedule.Date;
-                        response.ScheduleDateTimes.Add(sdt);
-                    }
                 }
+                return response;
             }
-            return response;
+            catch (Exception ex)
+            {
+                Console.WriteLine(Thread.CurrentThread.Name + "Error occurred.");
+                throw ex;
+            }
+            finally
+            {
+                Monitor.Exit(lockObject);
+                log.Info("GetAllDates after locking");
+            }
         }
 
         public DateFunctionTeamResponse GetTeamsByFunctionForDate(string dateStr)
         {
-            var accountAll = _context.Accounts.Include(x => x.Schedules).ToList();
-            var dateTime = DateTime.Parse(dateStr);
-            DateFunctionTeamResponse response = new DateFunctionTeamResponse();
-            response.DateFunctionTeams = new List<DateFunctionTeam>();
+            log.Info("GetTeamsByFunctionForDate before locking");
+            Monitor.Enter(lockObject);
 
-            foreach (var account in accountAll)
+            try
             {
-                foreach (var schedule in account.Schedules)
-                {
-                    DateFunctionTeam team = null;
-                        
-                    if (schedule.Date == dateTime)
-                    {
-                        // Find existing team for the date and function
-                        foreach (var item in response.DateFunctionTeams)
-                        {
-                            if (schedule.Date == item.Date && item.Function == schedule.UserFunction)
-                            {
-                                team = item;
-                                break;
-                            }
-                        }
-                        if(team == null)
-                        {
-                            team = new DateFunctionTeam(dateTime, schedule.UserFunction);
-                            response.DateFunctionTeams.Add(team);
-                        }
+                var accountAll = _context.Accounts.Include(x => x.Schedules).ToList();
+                var dateTime = DateTime.Parse(dateStr);
+                DateFunctionTeamResponse response = new DateFunctionTeamResponse();
+                response.DateFunctionTeams = new List<DateFunctionTeam>();
 
-                        User user = new User();
-                        user = _mapper.Map<User>(account);
-                        user.Function = schedule.UserFunction;
-                        user.UserAvailability = schedule.UserAvailability;
-                        team.Users.Add(user);
+                foreach (var account in accountAll)
+                {
+                    foreach (var schedule in account.Schedules)
+                    {
+                        DateFunctionTeam team = null;
+
+                        if (schedule.Date == dateTime)
+                        {
+                            // Find existing team for the date and function
+                            foreach (var item in response.DateFunctionTeams)
+                            {
+                                if (schedule.Date == item.Date && item.Function == schedule.UserFunction)
+                                {
+                                    team = item;
+                                    break;
+                                }
+                            }
+                            if (team == null)
+                            {
+                                team = new DateFunctionTeam(dateTime, schedule.UserFunction);
+                                response.DateFunctionTeams.Add(team);
+                            }
+
+                            User user = new User();
+                            user = _mapper.Map<User>(account);
+                            user.Function = schedule.UserFunction;
+                            user.UserAvailability = schedule.UserAvailability;
+                            team.Users.Add(user);
+                        }
                     }
                 }
+                return response;
             }
-            return response;
+            catch (Exception ex)
+            {
+                Console.WriteLine(Thread.CurrentThread.Name + "Error occurred.");
+                throw ex;
+            }
+            finally
+            {
+                Monitor.Exit(lockObject);
+                log.Info("GetTeamsByFunctionForDate after locking");
+            }
         }
         public AccountResponse GetById(int id)
         {
-            var account = getAccount(id);
+            log.Info("GetById before locking");
+            Monitor.Enter(lockObject);
 
-            return _mapper.Map<AccountResponse>(account);
+            try
+            {
+                var account = getAccount(id);
+
+                return _mapper.Map<AccountResponse>(account);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(Thread.CurrentThread.Name + "Error occurred.");
+                throw ex;
+            }
+            finally
+            {
+                Monitor.Exit(lockObject);
+                log.Info("GetById after locking");
+            }
         }
 
         public AccountResponse Create(CreateRequest model)
         {
-            log.InfoFormat(Thread.CurrentThread.Name + "Entering critical section");
+            log.Info("Create before locking");
             Monitor.Enter(lockObject);
-            try
+
+            using (IDbContextTransaction transaction = _context.Database.BeginTransaction())
             {
-                // validate
-                if (_context.Accounts.Any(x => x.Email == model.Email))
-                    throw new AppException($"Email '{model.Email}' is already registered");
+                try
+                {
+                    // validate
+                    if (_context.Accounts.Any(x => x.Email == model.Email))
+                        throw new AppException($"Email '{model.Email}' is already registered");
 
-                // map model to new account object
-                var account = _mapper.Map<Account>(model);
-                account.Created = DateTime.UtcNow;
-                account.Verified = DateTime.UtcNow;
+                    // map model to new account object
+                    var account = _mapper.Map<Account>(model);
+                    account.Created = DateTime.UtcNow;
+                    account.Verified = DateTime.UtcNow;
 
-                // hash password
-                account.PasswordHash = BC.HashPassword(model.Password);
+                    // hash password
+                    account.PasswordHash = BC.HashPassword(model.Password);
 
-                // save account
-                _context.Accounts.Add(account);
-                _context.SaveChanges();
+                    // save account
+                    _context.Accounts.Add(account);
+                    _context.SaveChanges();
+                    transaction.Commit();
 
-                return _mapper.Map<AccountResponse>(account);
+                    return _mapper.Map<AccountResponse>(account);
+                }
+                catch (Exception ex)
+                {
+                    transaction.Rollback();
+                    Console.WriteLine(Thread.CurrentThread.Name + "Error occurred.");
+                    throw ex;
+                }
+                finally
+                {
+                    Monitor.Exit(lockObject);
+                    Console.WriteLine(Thread.CurrentThread.Name + " Exit from critical section");
+                    log.Info("Create after locking");
+                }
             }
-            finally
-            {
-                Monitor.Exit(lockObject);
-                Console.WriteLine(Thread.CurrentThread.Name + " Exit from critical section");
-            }
-
         }
 
         public AccountResponse Update(int id, UpdateRequest model)
         {
-            log.InfoFormat(Thread.CurrentThread.Name + "Entering critical section");
+            log.Info("Update before locking"); ;
             Monitor.Enter(lockObject);
-            try
+
+            using (IDbContextTransaction transaction = _context.Database.BeginTransaction())
             {
-                var account = getAccount(id);
-                // validate
-                if (account.Email != model.Email && _context.Accounts.Any(x => x.Email == model.Email))
-                    throw new AppException($"Email '{model.Email}' is already taken");
+                try
+                {
+                    var account = getAccount(id);
+                    // validate
+                    if (account.Email != model.Email && _context.Accounts.Any(x => x.Email == model.Email))
+                        throw new AppException($"Email '{model.Email}' is already taken");
 
-                // hash password if it was entered
-                if (!string.IsNullOrEmpty(model.Password))
-                    account.PasswordHash = BC.HashPassword(model.Password);
+                    // hash password if it was entered
+                    if (!string.IsNullOrEmpty(model.Password))
+                        account.PasswordHash = BC.HashPassword(model.Password);
 
-                _mapper.Map(model, account);
+                    _mapper.Map(model, account);
 
-                account.Updated = DateTime.UtcNow;
-                _context.Accounts.Update(account);
-                _context.SaveChanges();
+                    account.Updated = DateTime.UtcNow;
+                    _context.Accounts.Update(account);
+                    _context.SaveChanges();
+                    transaction.Commit();
 
-                return _mapper.Map<AccountResponse>(account);
+                    return _mapper.Map<AccountResponse>(account);
+                }
+                catch (Exception ex)
+                {
+                    transaction.Rollback();
+                    Console.WriteLine(Thread.CurrentThread.Name + "Error occurred.");
+                    throw ex;
+                }
+                finally
+                {
+                    Monitor.Exit(lockObject);
+                    log.Info("Update after locking"); ;
+                }
             }
-            finally
-            {
-                Monitor.Exit(lockObject);
-                Console.WriteLine(Thread.CurrentThread.Name + " Exit from critical section");
-            }
-
         }
         public AccountResponse DeleteSchedule(int id, UpdateScheduleRequest scheduleReq)
         {
             log.InfoFormat(Thread.CurrentThread.Name + "Entering critical section");
             Monitor.Enter(lockObject);
-            try
+
+            using (IDbContextTransaction transaction = _context.Database.BeginTransaction())
             {
-                var account = getAccount(id);
-
-                Schedule toRemove = null;
-
-                foreach (var item in account.Schedules)
+                try
                 {
-                    if (DateTime.Compare(item.Date, scheduleReq.Date) == 0 && item.UserFunction == scheduleReq.UserFunction)
+                    var account = getAccount(id);
+
+                    Schedule toRemove = null;
+
+                    foreach (var item in account.Schedules)
                     {
-                        toRemove = item;
-                        break; // Found
+                        if (DateTime.Compare(item.Date, scheduleReq.Date) == 0 && item.UserFunction == scheduleReq.UserFunction)
+                        {
+                            toRemove = item;
+                            break; // Found
+                        }
                     }
+                    if (toRemove != null)
+                    {
+                        _context.Schedules.RemoveRange(toRemove);
+                    }
+
+                    account.Updated = DateTime.UtcNow;
+                    _context.SaveChanges();
+                    transaction.Commit();
+
+                    return _mapper.Map<AccountResponse>(account);
                 }
-                if (toRemove != null)
+                catch (Exception ex)
                 {
-                    _context.Schedules.RemoveRange(toRemove);
+                    transaction.Rollback();
+                    Console.WriteLine(Thread.CurrentThread.Name + "Error occurred.");
+                    throw ex;
                 }
-
-                account.Updated = DateTime.UtcNow;
-                _context.SaveChanges();
-
-                return _mapper.Map<AccountResponse>(account);
-            }
-            finally
-            {
-                Monitor.Exit(lockObject);
-                Console.WriteLine(Thread.CurrentThread.Name + " Exit from critical section");
+                finally
+                {
+                    Monitor.Exit(lockObject);
+                    Console.WriteLine(Thread.CurrentThread.Name + " Exit from critical section");
+                }
             }
         }
 
         public AccountResponse AddSchedule(int id, UpdateScheduleRequest scheduleReq)
         {
-            log.InfoFormat(Thread.CurrentThread.Name + "Entering critical section");
+            log.Info("AddSchedule before locking");
             Monitor.Enter(lockObject);
-            try
-            {
-                var account = getAccount(id);
-                var newSchedule = new Schedule();
-                newSchedule = _mapper.Map<Schedule>(scheduleReq);
-                account.Schedules.Add(newSchedule);
-                _context.Accounts.Update(account);
-                _context.SaveChanges();
 
-                return _mapper.Map<AccountResponse>(account);
-            }
-            finally
+            using (IDbContextTransaction transaction = _context.Database.BeginTransaction())
             {
-                Monitor.Exit(lockObject);
-                Console.WriteLine(Thread.CurrentThread.Name + " Exit from critical section");
+                try
+                {
+                    var account = getAccount(id);
+                    var newSchedule = new Schedule();
+                    newSchedule = _mapper.Map<Schedule>(scheduleReq);
+                    account.Schedules.Add(newSchedule);
+                    _context.Accounts.Update(account);
+                    _context.SaveChanges();
+                    transaction.Commit();
+
+                    return _mapper.Map<AccountResponse>(account);
+                }
+                catch (Exception ex)
+                {
+                    transaction.Rollback();
+                    Console.WriteLine(Thread.CurrentThread.Name + "Error occurred.");
+                    throw ex;
+                }
+                finally
+                {
+                    Monitor.Exit(lockObject);
+                    Console.WriteLine(Thread.CurrentThread.Name + " Exit from critical section");
+                    log.Info("AddSchedule after locking");
+                }
             }
         }
         public AccountResponse DeleteFunction(int id, UpdateUserFunctionRequest functionReq)
         {
-            log.InfoFormat(Thread.CurrentThread.Name + "Entering critical section");
+            log.Info("DeleteFunction before locking");
             Monitor.Enter(lockObject);
-            try
-            {
-                var account = getAccount(id);
 
-                Function toRemove = null;
-                // Purge all schedules & UserFunctions  - we don't know which were changed
-                foreach (var item in account.UserFunctions)
+            using (IDbContextTransaction transaction = _context.Database.BeginTransaction())
+            {
+                try
                 {
-                    if (item.UserFunction == functionReq.UserFunction)
+                    var account = getAccount(id);
+
+                    Function toRemove = null;
+                    // Purge all schedules & UserFunctions  - we don't know which were changed
+                    foreach (var item in account.UserFunctions)
                     {
-                        toRemove = item;
-                        break; // Found
+                        if (item.UserFunction == functionReq.UserFunction)
+                        {
+                            toRemove = item;
+                            break; // Found
+                        }
                     }
-                }
-                if (toRemove != null)
-                {
-                    _context.UserFunctions.RemoveRange(toRemove);
+                    if (toRemove != null)
+                    {
+                        _context.UserFunctions.RemoveRange(toRemove);
+                    }
+
+                    account.Updated = DateTime.UtcNow;
                     _context.SaveChanges();
+                    transaction.Commit();
+
+                    return _mapper.Map<AccountResponse>(account);
                 }
-
-                account.Updated = DateTime.UtcNow;
-
-                return _mapper.Map<AccountResponse>(account);
+                catch (Exception ex)
+                {
+                    transaction.Rollback();
+                    Console.WriteLine(Thread.CurrentThread.Name + "Error occurred.");
+                    throw ex;
+                }
+                finally
+                {
+                    Monitor.Exit(lockObject);
+                    log.Info("DeleteFunction after locking"); ;
+                }
             }
-            finally
-            {
-                Monitor.Exit(lockObject);
-                Console.WriteLine(Thread.CurrentThread.Name + " Exit from critical section");
-            }
-
         }
 
         public AccountResponse AddFunction(int id, UpdateUserFunctionRequest functionReq)
         {
-            log.InfoFormat(Thread.CurrentThread.Name + "Entering critical section");
+            log.Info("AddFunction before locking");
             Monitor.Enter(lockObject);
-            try
+            using (IDbContextTransaction transaction = _context.Database.BeginTransaction())
             {
-                var account = getAccount(id);
-                var newFunction = new Function();
-                newFunction = _mapper.Map<Function>(functionReq);
-                account.UserFunctions.Add(newFunction);
-                _context.Accounts.Update(account);
-                _context.SaveChanges();
+                try
+                {
+                    var account = getAccount(id);
+                    var newFunction = new Function();
+                    newFunction = _mapper.Map<Function>(functionReq);
+                    account.UserFunctions.Add(newFunction);
+                    _context.Accounts.Update(account);
+                    _context.SaveChanges();
+                    transaction.Commit();
 
-                return _mapper.Map<AccountResponse>(account);
-            }
-            finally
-            {
-                Monitor.Exit(lockObject);
-                Console.WriteLine(Thread.CurrentThread.Name + " Exit from critical section");
+                    return _mapper.Map<AccountResponse>(account);
+                }
+                catch (Exception ex)
+                {
+                    transaction.Rollback();
+                    Console.WriteLine(Thread.CurrentThread.Name + "Error occurred.");
+                    throw ex;
+                }
+                finally
+                {
+                    Monitor.Exit(lockObject);
+                    log.Info("AddFunction after locking");
+                }
             }
         }
 
@@ -503,61 +793,71 @@ namespace WebApi.Services
         */
         public AccountResponse MoveSchedule2Pool(int id, UpdateScheduleRequest scheduleReq)
         {
-            var autEmail = bool.Parse(_appSettings.autoEmail);
-
-            var account = getAccount(id);
-            log.InfoFormat("MoveSchedule2Pool before locking for {0}. Date {1} function {2}",
-                account.FirstName, scheduleReq.Date, scheduleReq.UserFunction);
+            log.Info("MoveSchedule2Pool before locking");
             Monitor.Enter(lockObject);
-            try
+
+            using (IDbContextTransaction transaction = _context.Database.BeginTransaction())
             {
-
-                Schedule toRemove = null;
-
-                foreach (var item in account.Schedules)
+                try
                 {
+                    var autEmail = bool.Parse(_appSettings.autoEmail);
 
-                    if (DateTime.Compare(item.Date, scheduleReq.Date) == 0 && item.UserFunction == scheduleReq.UserFunction)
-                    {
-                        toRemove = item;
-                        break; // Found
-                    }
-                }
-                if (toRemove != null)
-                {
-                    log.Info("MoveSchedule2Pool putting: " + scheduleReq.UserFunction + " to pool");
-                    PushToPool(account, scheduleReq);
-
-                    account.Schedules.Remove(toRemove);
-                    _context.Schedules.RemoveRange(toRemove); // To remove from DB
-                    account.Updated = DateTime.UtcNow;
-                    _context.Accounts.Update(account);
-                    _context.SaveChanges();
-
-                    if (autEmail)
-                    {
-                        SendEmail2AllRoles(account, toRemove);
-                    }
-                }
-                else
-                {
-                    log.WarnFormat("Schedule did not exist in the schdule list for {0}. Date {1} function {2}",
+                    var account = getAccount(id);
+                    log.InfoFormat("MoveSchedule2Pool before locking for {0}. Date {1} function {2}",
                         account.FirstName, scheduleReq.Date, scheduleReq.UserFunction);
+
+                    Schedule toRemove = null;
+
+                    foreach (var item in account.Schedules)
+                    {
+
+                        if (DateTime.Compare(item.Date, scheduleReq.Date) == 0 && item.UserFunction == scheduleReq.UserFunction)
+                        {
+                            toRemove = item;
+                            break; // Found
+                        }
+                    }
+                    if (toRemove != null)
+                    {
+                        log.Info("MoveSchedule2Pool putting: " + scheduleReq.UserFunction + " to pool");
+                        PushToPool(account, scheduleReq);
+
+                        account.Schedules.Remove(toRemove);
+                        _context.Schedules.RemoveRange(toRemove); // To remove from DB
+                        account.Updated = DateTime.UtcNow;
+                        _context.Accounts.Update(account);
+                        _context.SaveChanges();
+                        
+                        if (autEmail)
+                        {
+                            SendEmail2AllRoles(account, toRemove);
+                        }
+                    }
+                    else
+                    {
+                        log.WarnFormat("Schedule did not exist in the schdule list for {0}. Date {1} function {2}",
+                            account.FirstName, scheduleReq.Date, scheduleReq.UserFunction);
+                    }
+                    transaction.Commit();
+                    return _mapper.Map<AccountResponse>(account);
+                }
+                catch (Exception ex)
+                {
+                    transaction.Rollback();
+                    Console.WriteLine(Thread.CurrentThread.Name + "Error occurred.");
+                    throw ex;
+                }
+                finally
+                {
+                    Monitor.Exit(lockObject);
+                    Console.WriteLine(Thread.CurrentThread.Name + " Exit from critical section");
+                    log.Info("MoveSchedule2Pool after locking");
                 }
             }
-            finally
-            {
-                Monitor.Exit(lockObject);
-                Console.WriteLine(Thread.CurrentThread.Name + " Exit from critical section");
-            }
-            log.Info("MoveSchedule2Pool after locking");
-
-            return _mapper.Map<AccountResponse>(account);
         }
 
         public AccountResponse GetScheduleFromPool(int id, UpdateScheduleRequest scheduleReq)
         {
-            var account = getAccount(id);
 
             log.Info("GetScheduleFromPool before locking");
             Monitor.Enter(lockObject);
@@ -566,6 +866,9 @@ namespace WebApi.Services
                 try
                 {
                     log.Info("MoveSchedule2Pool removing: " + scheduleReq.UserFunction + " from pool");
+
+                    var account = getAccount(id);
+
                     var poolElement = PopFromPool(account, scheduleReq);
 
                     if (poolElement != null)
@@ -581,30 +884,31 @@ namespace WebApi.Services
                         account.Schedules.Add(schedule);
                         _context.Accounts.Update(account);
                         _context.SaveChanges();
+                        transaction.Commit();
+                        return _mapper.Map<AccountResponse>(account);
                     }
                     else
                     {
                         // Pool element not found - do nothing for now
                         log.Info("GetScheduleFromPool got NULL from Pool elements");
                         account = null;
+                        //transaction.Commit(); // Release the lock
                         throw new AppException("The schedule has been already taken");
                     }
-                    transaction.Commit();
                 }
                 catch (Exception ex)
                 {
                     transaction.Rollback();
                     Console.WriteLine(Thread.CurrentThread.Name + "Error occurred.");
+                    throw ex;
                 }
                 finally
                 {
                     Monitor.Exit(lockObject);
                     Console.WriteLine(Thread.CurrentThread.Name + " Exit from critical section");
+                    log.Info("GetScheduleFromPool after locking");
                 }
             }
-            log.Info("GetScheduleFromPool after locking");
-
-            return _mapper.Map<AccountResponse>(account);
         }
         public SchedulePoolElementsResponse GetAllAvailableSchedules()
         {
@@ -626,12 +930,12 @@ namespace WebApi.Services
 
         public SchedulePoolElementsResponse GetAvailableSchedules(int id)
         {
-            var account = getAccount(id);
             SchedulePoolElementsResponse response = new SchedulePoolElementsResponse();
             log.Info("GetAvailableSchedules before locking");
             Monitor.Enter(lockObject);
             try
             {
+                var account = getAccount(id);
                 List<SchedulePoolElement> list = new List<SchedulePoolElement>();
 
                 foreach (var poolElement in _context.SchedulePoolElements.ToList())
@@ -659,37 +963,87 @@ namespace WebApi.Services
             log.Info("GetScheduleFromPool before locking");
             Monitor.Enter(lockObject);
 
-            try
+            using (IDbContextTransaction transaction = _context.Database.BeginTransaction())
             {
-                var schedulePoolAll = _context.SchedulePoolElements.ToList();
-                SchedulePoolElement poolElement = null;
-                foreach (var elem in schedulePoolAll)
+                try
                 {
-                    if (id == elem.Id && email == elem.Email && userFunction == elem.UserFunction)
+                    var schedulePoolAll = _context.SchedulePoolElements.ToList();
+                    SchedulePoolElement poolElement = null;
+                    foreach (var elem in schedulePoolAll)
                     {
-                        poolElement = elem;
-                        break;
+                        if (id == elem.Id && email == elem.Email && userFunction == elem.UserFunction)
+                        {
+                            poolElement = elem;
+                            break;
+                        }
+                    }
+                    if (poolElement != null)
+                    {
+                        _context.SchedulePoolElements.Remove(poolElement);
+                        _context.SaveChanges();
+                        transaction.Commit();
+                        return poolElement;
+                    }
+                    else
+                    {
+                        transaction.Commit();
+                        return null;
                     }
                 }
-                if (poolElement != null)
+                catch (Exception )
                 {
-                    _context.SchedulePoolElements.Remove(poolElement);
-                    _context.SaveChanges();
-                    return poolElement;
+                    transaction.Rollback();
+                    Console.WriteLine(Thread.CurrentThread.Name + "Error occurred.");
                 }
-                else
+                finally
                 {
-                    return null;
+                    Monitor.Exit(lockObject);
+                    log.Info("GetScheduleFromPool after locking");
                 }
             }
-            finally
+            return null;
+        }
+        public void Delete(int id)
+        {
+            log.Info("Delete before locking");
+            Monitor.Enter(lockObject);
+
+            using (IDbContextTransaction transaction = _context.Database.BeginTransaction())
             {
-                Monitor.Exit(lockObject);
-                log.Info("GetScheduleFromPool after locking");
-            } 
+                try
+                {
+                    var account = getAccount(id);
+
+                    // Purge all schedules for the account
+                    foreach (var item in account.Schedules)
+                    {
+                        _context.Schedules.Remove(item);
+                    }
+                    foreach (var item in account.UserFunctions)
+                    {
+                        _context.UserFunctions.Remove(item);
+                    }
+
+                    _context.Accounts.Remove(account);
+                    _context.SaveChanges();
+                    transaction.Commit();
+                }
+                catch (Exception )
+                {
+                    transaction.Rollback();
+                    Console.WriteLine(Thread.CurrentThread.Name + "Error occurred.");
+                }
+                finally
+                {
+                    Monitor.Exit(lockObject);
+                    log.Info("Delete after locking");
+                }
+            }
         }
 
-        public SchedulePoolElement PopFromPool(Account account, UpdateScheduleRequest item)
+
+        /* Private helper functions */
+        private SchedulePoolElement PopFromPool(Account account, UpdateScheduleRequest item)
         {
             var schedulePoolAll = _context.SchedulePoolElements.ToList();
             SchedulePoolElement poolElement = null;
@@ -714,7 +1068,7 @@ namespace WebApi.Services
             }
         }
 
-        public void PushToPool(Account account, UpdateScheduleRequest item)
+        private void PushToPool(Account account, UpdateScheduleRequest item)
         {
             // var schedulePoolAll = _context.SchedulePoolElements.ToList();
             // bool found = false;
@@ -732,7 +1086,7 @@ namespace WebApi.Services
             _context.SchedulePoolElements.Add(newPoolElement);
             _context.SaveChanges();
         }
-        public void SendEmail2AllRoles(Account a, Schedule schedule)
+        private void SendEmail2AllRoles(Account a, Schedule schedule)
         {
             string message = schedule.UserFunction + " " + a.FirstName + " "
                 + a.LastName + " is unable to attend their duties on " + schedule.Date;
@@ -755,25 +1109,6 @@ namespace WebApi.Services
                 }
             }
         }
-        public void Delete(int id)
-        {
-
-            var account = getAccount(id);
-
-            // Purge all schedules for the account
-            foreach (var item in account.Schedules)
-            {
-                _context.Schedules.Remove(item);
-            }
-            foreach (var item in account.UserFunctions)
-            {
-                _context.UserFunctions.Remove(item);
-            }
-
-            _context.Accounts.Remove(account);
-            _context.SaveChanges();
-        }
-
         // helper methods
 
         private Account getAccount(int id)
@@ -823,7 +1158,7 @@ namespace WebApi.Services
             return tokenHandler.WriteToken(token);
         }
         /* JD Test*/
-        public Task<string> GetJWTToken(string user)
+        private Task<string> GetJWTToken(string user)
         {
 
             var now = DateTime.UtcNow;
@@ -855,7 +1190,7 @@ namespace WebApi.Services
             //await was not used so no need for `async` keyword. Just return task
             return Task.FromResult(tokenString);
         }
-        public static double ConvertToUnixTimestamp(DateTime date)
+        private static double ConvertToUnixTimestamp(DateTime date)
         {
             DateTime origin = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);
             TimeSpan diff = date.ToUniversalTime() - origin;
