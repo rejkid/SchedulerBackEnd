@@ -105,18 +105,19 @@ namespace WebApi.Services
                     // save changes to db
                     _context.Update(account);
                     _context.SaveChanges();
-                    transaction.Commit();
 
                     var response = _mapper.Map<AuthenticateResponse>(account);
                     response.JwtToken = jwtToken;
                     response.RefreshToken = refreshToken.Token;
+
+                    transaction.Commit();
                     return response;
                 }
                 catch (Exception ex)
                 {
                     transaction.Rollback();
                     Console.WriteLine(Thread.CurrentThread.Name + "Error occurred.");
-                    log.Error(Thread.CurrentThread.Name + "Error occurred.\n" + ex.Message);
+                    log.Error(Thread.CurrentThread.Name + "Error occurred:" + ex.Message);
                     throw ex;
                 }
                 finally
@@ -150,7 +151,6 @@ namespace WebApi.Services
 
                     _context.Update(account);
                     _context.SaveChanges();
-                    transaction.Commit();
 
                     // generate new jwt
                     var jwtToken = generateJwtToken(account);
@@ -158,6 +158,8 @@ namespace WebApi.Services
                     var response = _mapper.Map<AuthenticateResponse>(account);
                     response.JwtToken = jwtToken;
                     response.RefreshToken = newRefreshToken.Token;
+
+                    transaction.Commit();
                     return response;
                 }
                 catch (Exception ex)
@@ -239,15 +241,18 @@ namespace WebApi.Services
                     // save account
                     _context.Accounts.Add(account);
                     _context.SaveChanges();
-                    transaction.Commit();
 
                     // send email
                     sendVerificationEmail(account, origin);
+
+                    transaction.Commit();
+                    log.WarnFormat("Registration successful for = {0} ", model.Email);
                 }
                 catch (Exception ex)
                 {
                     transaction.Rollback();
                     Console.WriteLine(Thread.CurrentThread.Name + "Error occurred.");
+                    log.Error("Error during registering:" + ex.Message);
                     throw ex;
                 }
                 finally
@@ -316,10 +321,11 @@ namespace WebApi.Services
 
                     _context.Accounts.Update(account);
                     _context.SaveChanges();
-                    transaction.Commit();
 
                     // send email
                     sendPasswordResetEmail(account, origin);
+
+                    transaction.Commit();
                 }
                 catch (Exception ex)
                 {
@@ -385,6 +391,7 @@ namespace WebApi.Services
 
                     _context.Accounts.Update(account);
                     _context.SaveChanges();
+
                     transaction.Commit();
                 }
                 catch (Exception ex)
@@ -572,9 +579,11 @@ namespace WebApi.Services
                     // save account
                     _context.Accounts.Add(account);
                     _context.SaveChanges();
+
+                    AccountResponse response = _mapper.Map<AccountResponse>(account);
                     transaction.Commit();
 
-                    return _mapper.Map<AccountResponse>(account);
+                    return response;
                 }
                 catch (Exception ex)
                 {
@@ -614,9 +623,11 @@ namespace WebApi.Services
                     account.Updated = DateTime.UtcNow;
                     _context.Accounts.Update(account);
                     _context.SaveChanges();
-                    transaction.Commit();
 
-                    return _mapper.Map<AccountResponse>(account);
+                    AccountResponse response = _mapper.Map<AccountResponse>(account);
+
+                    transaction.Commit();
+                    return response;
                 }
                 catch (Exception ex)
                 {
@@ -659,9 +670,12 @@ namespace WebApi.Services
 
                     account.Updated = DateTime.UtcNow;
                     _context.SaveChanges();
+
+                    AccountResponse response = _mapper.Map<AccountResponse>(account);
+
                     transaction.Commit();
 
-                    return _mapper.Map<AccountResponse>(account);
+                    return response;
                 }
                 catch (Exception ex)
                 {
@@ -692,9 +706,12 @@ namespace WebApi.Services
                     account.Schedules.Add(newSchedule);
                     _context.Accounts.Update(account);
                     _context.SaveChanges();
+
+                    AccountResponse response = _mapper.Map<AccountResponse>(account);
+
                     transaction.Commit();
 
-                    return _mapper.Map<AccountResponse>(account);
+                    return response;
                 }
                 catch (Exception ex)
                 {
@@ -884,15 +901,18 @@ namespace WebApi.Services
                         account.Schedules.Add(schedule);
                         _context.Accounts.Update(account);
                         _context.SaveChanges();
+
+                        AccountResponse response = _mapper.Map<AccountResponse>(account);
+
                         transaction.Commit();
-                        return _mapper.Map<AccountResponse>(account);
+
+                        return response;
                     }
                     else
                     {
                         // Pool element not found - do nothing for now
                         log.Info("GetScheduleFromPool got NULL from Pool elements");
                         account = null;
-                        //transaction.Commit(); // Release the lock
                         throw new AppException("The schedule has been already taken");
                     }
                 }
