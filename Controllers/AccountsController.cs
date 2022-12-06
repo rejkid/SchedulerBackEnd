@@ -72,12 +72,17 @@ public class UserFriendlyException: Exception
         [HttpPost("refresh-token")]
         public ActionResult<AuthenticateResponse> RefreshToken()
         {
+
             var refreshToken = Request.Cookies["refreshToken"];
+
+            log.InfoFormat("Old response.RefreshToken= {0} ",
+                refreshToken);
+
             Console.WriteLine("refreshToken is:"+refreshToken);
             var response = _accountService.RefreshToken(refreshToken, ipAddress());
             setTokenCookie(response.RefreshToken);
 
-            log.InfoFormat("response.RefreshToken= {0} ",
+            log.InfoFormat("New response.RefreshToken= {0} ",
                 response.RefreshToken);
             return Ok(response);
         }
