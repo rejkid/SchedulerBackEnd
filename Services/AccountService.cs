@@ -137,8 +137,12 @@ namespace WebApi.Services
             {
                 try
                 {
-
                     var (refreshToken, account) = getRefreshToken(token);
+
+                    log.InfoFormat("Old RefreshToken= {0} for {1} {2}",
+                        refreshToken.Token,
+                        account.FirstName,
+                        account.LastName);
 
                     // replace old refresh token with a new one and save
                     var newRefreshToken = generateRefreshToken(ipAddress);
@@ -148,6 +152,11 @@ namespace WebApi.Services
                     account.RefreshTokens.Add(newRefreshToken);
 
                     removeOldRefreshTokens(account);
+
+                    log.InfoFormat("New RefreshToken= {0} for {1} {2}",
+                        newRefreshToken.Token,
+                        account.FirstName,
+                        account.LastName);
 
                     _context.Update(account);
                     _context.SaveChanges();
@@ -1090,16 +1099,6 @@ namespace WebApi.Services
 
         private void PushToPool(Account account, UpdateScheduleRequest item)
         {
-            // var schedulePoolAll = _context.SchedulePoolElements.ToList();
-            // bool found = false;
-            // foreach (var elem in schedulePoolAll)
-            // {
-            //     if (item.Date == elem.Date && /* account.Email == elem.Email &&  */item.UserFunction == elem.UserFunction)
-            //     {
-            //         found = true;
-            //         break;
-            //     }
-            // }
             var newPoolElement = new SchedulePoolElement();
             newPoolElement = _mapper.Map<SchedulePoolElement>(item);
             newPoolElement.Email = account.Email;

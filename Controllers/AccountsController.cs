@@ -74,15 +74,10 @@ public class UserFriendlyException: Exception
         {
             var refreshToken = Request.Cookies["refreshToken"];
 
-            log.InfoFormat("Old response.RefreshToken= {0} ",
-                refreshToken);
-
             Console.WriteLine("refreshToken is:"+refreshToken);
             var response = _accountService.RefreshToken(refreshToken, ipAddress());
             setTokenCookie(response.RefreshToken);
 
-            log.InfoFormat("New response.RefreshToken= {0} ",
-                response.RefreshToken);
             return Ok(response);
         }
 
