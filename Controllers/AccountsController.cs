@@ -54,10 +54,10 @@ public class UserFriendlyException: Exception
         [HttpPost("authenticate")]
         public ActionResult<AuthenticateResponse> Authenticate(AuthenticateRequest model)
         {
-        log.WarnFormat("Authenticating user {0} password {1} for ipaddress: {2}",
-            model.Email,
-            model.Password,
-            ipAddress());
+            log.InfoFormat("Authenticating user {0} password {1} for ipaddress: {2}",
+                model.Email,
+                model.Password,
+                ipAddress());
             var response = _accountService.Authenticate(model, ipAddress());
             setTokenCookie(response.RefreshToken);
 
@@ -72,7 +72,6 @@ public class UserFriendlyException: Exception
         [HttpPost("refresh-token")]
         public ActionResult<AuthenticateResponse> RefreshToken()
         {
-
             var refreshToken = Request.Cookies["refreshToken"];
 
             log.InfoFormat("Old response.RefreshToken= {0} ",
