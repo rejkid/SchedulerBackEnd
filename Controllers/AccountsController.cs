@@ -60,6 +60,11 @@ public class UserFriendlyException: Exception
             ipAddress());
             var response = _accountService.Authenticate(model, ipAddress());
             setTokenCookie(response.RefreshToken);
+
+            log.InfoFormat("Setting cookie - response.RefreshToken= {0} for E-mail: {1}",
+                response.RefreshToken,
+                model.Email);
+
             return Ok(response);
         }
 
@@ -72,7 +77,7 @@ public class UserFriendlyException: Exception
             var response = _accountService.RefreshToken(refreshToken, ipAddress());
             setTokenCookie(response.RefreshToken);
 
-            log.WarnFormat("response.RefreshToken= {0} version ",
+            log.InfoFormat("response.RefreshToken= {0} ",
                 response.RefreshToken);
             return Ok(response);
         }
