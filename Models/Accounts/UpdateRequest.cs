@@ -15,6 +15,10 @@ namespace WebApi.Models.Accounts
         public string Title { get; set; }
         public string FirstName { get; set; }
         public string LastName { get; set; }
+
+        [Required]
+        public DateTime Dob { get; set; }
+
         public UpdateScheduleRequest[] Schedules { get; set; }
         public UpdateUserFunctionRequest[] UserFunctions { get; set; }
 

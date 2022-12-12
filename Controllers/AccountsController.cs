@@ -54,9 +54,10 @@ public class UserFriendlyException: Exception
         [HttpPost("authenticate")]
         public ActionResult<AuthenticateResponse> Authenticate(AuthenticateRequest model)
         {
-            log.InfoFormat("Authenticating user {0} password {1} for ipaddress: {2}",
+            log.InfoFormat("Authenticating user {0} password {1} DOB {2} for ipaddress: {3}",
                 model.Email,
                 model.Password,
+                model.Dob,
                 ipAddress());
             var response = _accountService.Authenticate(model, ipAddress());
             setTokenCookie(response.RefreshToken);
@@ -111,7 +112,8 @@ public class UserFriendlyException: Exception
         [HttpPost("verify-email")]
         public IActionResult VerifyEmail(VerifyEmailRequest model)
         {
-            _accountService.VerifyEmail(model.Token);
+            DateTime dateTime = DateTime.Parse(model.Dob);
+            _accountService.VerifyEmail(model.Token, dateTime);
             return Ok(new { message = "Verification successful, you can now login" });
         }
 
@@ -125,7 +127,8 @@ public class UserFriendlyException: Exception
         [HttpPost("validate-reset-token")]
         public IActionResult ValidateResetToken(ValidateResetTokenRequest model)
         {
-            _accountService.ValidateResetToken(model);
+            DateTime dateTime = DateTime.Parse(model.Dob);
+            _accountService.ValidateResetToken(model, dateTime);
             return Ok(new { message = "Token is valid" });
         }
 

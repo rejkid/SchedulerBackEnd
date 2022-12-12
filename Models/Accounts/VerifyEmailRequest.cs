@@ -6,5 +6,6 @@ namespace WebApi.Models.Accounts
     {
         [Required]
         public string Token { get; set; }
+        public string Dob { get; set; }
     }
 }

@@ -14,10 +14,10 @@ namespace WebApi
             Host.CreateDefaultBuilder(args)
                 .ConfigureWebHostDefaults(webBuilder =>
                 {
-                    webBuilder.UseStartup<Startup>();
-                        //.UseUrls("https://192.168.0.19:4000");
+                    webBuilder.UseStartup<Startup>()
+                        //.UseUrls("https://192.168.0.19:4000")
                         //.UseUrls("http://192.168.0.19:4000");
-                        //.UseUrls("http://localhost:4000");
+                        .UseUrls("http://localhost:4000");
                         //.UseUrls("https://webapijanusz.azurewebsites.net:4000");
                         //.UseUrls("https://localhost:4000");
                 });

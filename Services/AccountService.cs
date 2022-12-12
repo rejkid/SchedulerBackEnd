@@ -20,6 +20,7 @@ using System.Diagnostics;
 using System.Threading;
 using log4net;
 using Microsoft.EntityFrameworkCore.Storage;
+using System.Security.Policy;
 
 namespace WebApi.Services
 {
@@ -29,9 +30,9 @@ namespace WebApi.Services
         AuthenticateResponse RefreshToken(string token, string ipAddress);
         void RevokeToken(string token, string ipAddress);
         void Register(RegisterRequest model, string origin);
-        void VerifyEmail(string token);
+        void VerifyEmail(string token, DateTime dob);
         void ForgotPassword(ForgotPasswordRequest model, string origin);
-        void ValidateResetToken(ValidateResetTokenRequest model);
+        void ValidateResetToken(ValidateResetTokenRequest mode, DateTime dateTimel);
         void ResetPassword(ResetPasswordRequest model);
         IEnumerable<AccountResponse> GetAll();
         AccountResponse GetById(int id);
@@ -88,10 +89,10 @@ namespace WebApi.Services
             {
                 try
                 {
-                    var account = _context.Accounts.SingleOrDefault(x => x.Email == model.Email);
+                    var account = _context.Accounts.SingleOrDefault(x => x.Email == model.Email && x.DOB == model.Dob);
 
                     if (account == null || !account.IsVerified || !BC.Verify(model.Password, account.PasswordHash))
-                        throw new AppException("Email or password is incorrect");
+                        throw new AppException("Email, DOB or password is incorrect");
 
                     // authentication successful so generate jwt and refresh tokens
                     var jwtToken = generateJwtToken(account);
@@ -227,7 +228,7 @@ namespace WebApi.Services
                 try
                 {
                     // validate
-                    if (_context.Accounts.Any(x => x.Email == model.Email))
+                    if (_context.Accounts.Any(x => x.Email == model.Email && x.DOB == model.Dob))
                     {
                         // send already registered error in email to prevent account enumeration
                         sendAlreadyRegisteredEmail(model.Email, origin);
@@ -272,7 +273,7 @@ namespace WebApi.Services
             }
         }
 
-        public void VerifyEmail(string token)
+        public void VerifyEmail(string token, DateTime dob)
         {
             log.Info("VerifyEmail before locking");
             Monitor.Enter(lockObject);
@@ -281,7 +282,7 @@ namespace WebApi.Services
             {
                 try
                 {
-                    var account = _context.Accounts.SingleOrDefault(x => x.VerificationToken == token);
+                    var account = _context.Accounts.SingleOrDefault(x => x.VerificationToken == token && (DateTime.Compare(x.DOB, dob) == 0));
 
                     if (account == null) throw new AppException("Verification failed");
 
@@ -315,13 +316,14 @@ namespace WebApi.Services
             {
                 try
                 {
-                    var account = _context.Accounts.SingleOrDefault(x => x.Email == model.Email);
+                    var account = _context.Accounts.SingleOrDefault(x => x.Email == model.Email && x.DOB == model.Dob);
 
                     // always return ok response to prevent email enumeration
                     if (account == null)
                     {
-                        transaction.Commit();
-                        return;
+                        throw new AppException("Email or DOB is incorrect");
+                        //transaction.Commit();
+                        //return;
                     }
 
                     // create reset token that expires after 1 day
@@ -350,15 +352,16 @@ namespace WebApi.Services
             }
         }
 
-        public void ValidateResetToken(ValidateResetTokenRequest model)
+        public void ValidateResetToken(ValidateResetTokenRequest model, DateTime dob)
         {
             log.Info("ValidateResetToken before locking");
             Monitor.Enter(lockObject);
             try
             {
                 var account = _context.Accounts.SingleOrDefault(x =>
-                x.ResetToken == model.Token &&
-                x.ResetTokenExpires > DateTime.UtcNow);
+                    x.ResetToken == model.Token &&
+                    (DateTime.Compare(x.DOB, dob) == 0) &&
+                    x.ResetTokenExpires > DateTime.UtcNow);
 
                 if (account == null)
                     throw new AppException("Invalid token");
@@ -494,6 +497,14 @@ namespace WebApi.Services
             {
                 var accountAll = _context.Accounts.Include(x => x.Schedules).ToList();
                 var dateTime = DateTime.Parse(dateStr);
+
+                var offset = TimeZoneInfo.Local.GetUtcOffset(DateTime.UtcNow);
+
+                log.InfoFormat("Date requested string {0} parsed value {1} offset {2}",
+                                dateStr,
+                                dateTime,
+                                offset);
+
                 DateFunctionTeamResponse response = new DateFunctionTeamResponse();
                 response.DateFunctionTeams = new List<DateFunctionTeam>();
 
@@ -574,7 +585,7 @@ namespace WebApi.Services
                 try
                 {
                     // validate
-                    if (_context.Accounts.Any(x => x.Email == model.Email))
+                    if (_context.Accounts.Any(x => x.Email == model.Email && x.DOB == model.Dob))
                         throw new AppException($"Email '{model.Email}' is already registered");
 
                     // map model to new account object
@@ -620,7 +631,7 @@ namespace WebApi.Services
                 {
                     var account = getAccount(id);
                     // validate
-                    if (account.Email != model.Email && _context.Accounts.Any(x => x.Email == model.Email))
+                    if (account.Email != model.Email && _context.Accounts.Any(x => x.Email == model.Email && x.DOB == model.Dob))
                         throw new AppException($"Email '{model.Email}' is already taken");
 
                     // hash password if it was entered
@@ -1258,14 +1269,14 @@ namespace WebApi.Services
             string message;
             if (!string.IsNullOrEmpty(origin))
             {
-                var verifyUrl = $"{origin}/account/verify-email?token={account.VerificationToken}";
+                var verifyUrl = $"{origin}/account/verify-email?token={account.VerificationToken}&DOB={account.DOB}";
                 message = $@"<p>Please click the below link to verify your email address:</p>
                              <p><a href=""{verifyUrl}"">{verifyUrl}</a></p>";
             }
             else
             {
                 message = $@"<p>Please use the below token to verify your email address with the <code>/accounts/verify-email</code> api route:</p>
-                             <p><code>{account.VerificationToken}</code></p>";
+                             <p><code>{account.VerificationToken+"&"+account.DOB}</code></p>";
             }
 
             _emailService.Send(
@@ -1300,14 +1311,14 @@ namespace WebApi.Services
             string message;
             if (!string.IsNullOrEmpty(origin))
             {
-                var resetUrl = $"{origin}/account/reset-password?token={account.ResetToken}";
+                var resetUrl = $"{origin}/account/reset-password?token={account.ResetToken}&DOB={System.Web.HttpUtility.UrlEncode(account.DOB.ToString())}";
                 message = $@"<p>Please click the below link to reset your password, the link will be valid for 1 day:</p>
                              <p><a href=""{resetUrl}"">{resetUrl}</a></p>";
             }
             else
             {
                 message = $@"<p>Please use the below token to reset your password with the <code>/accounts/reset-password</code> api route:</p>
-                             <p><code>{account.ResetToken}</code></p>";
+                             <p><code>{account.ResetToken + "&" + account.DOB}</code></p>";
             }
 
             _emailService.Send(

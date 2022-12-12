@@ -1,3 +1,4 @@
+using System;
 using System.ComponentModel.DataAnnotations;
 
 namespace WebApi.Models.Accounts
@@ -7,5 +8,8 @@ namespace WebApi.Models.Accounts
         [Required]
         [EmailAddress]
         public string Email { get; set; }
+
+        [Required]
+        public DateTime Dob { get; set; }
     }
 }

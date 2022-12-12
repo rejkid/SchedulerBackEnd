@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 
 using WebApi.Entities;
 namespace WebApi.Models.Accounts
@@ -11,6 +12,9 @@ namespace WebApi.Models.Accounts
         public string FirstName { get; set; }
         public string LastName { get; set; }
         public string Email { get; set; }
+
+        [Required]
+        public DateTime Dob { get; set; }
         public string Role { get; set; }
         public DateTime Created { get; set; }
         public DateTime? Updated { get; set; }
