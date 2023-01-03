@@ -759,9 +759,6 @@ namespace WebApi.Services
                 try
                 {
                     var account = getAccount(id);
-                    var newSchedule = new Schedule();
-                    newSchedule = _mapper.Map<Schedule>(scheduleReq);
-                    //account.Schedules.Add(newSchedule);
                     
                     foreach (var schedule in account.Schedules)
                     {
