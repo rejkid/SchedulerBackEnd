@@ -44,6 +44,7 @@ namespace WebApi.Services
         AccountResponse Update(int id, UpdateRequest model);
         public AccountResponse DeleteSchedule(int id, UpdateScheduleRequest scheduleReq);
         public AccountResponse AddSchedule(int id, UpdateScheduleRequest scheduleReq);
+        public AccountResponse UpdateSchedule(int id, UpdateScheduleRequest scheduleReq);
         public AccountResponse DeleteFunction(int id, UpdateUserFunctionRequest functionReq);
         public AccountResponse AddFunction(int id, UpdateUserFunctionRequest functionReq);
         //public SchedulePoolElementsResponse ChangeUserAvailability(int id, UpdateScheduleRequest scheduleReq);
@@ -744,6 +745,53 @@ namespace WebApi.Services
                     Monitor.Exit(lockObject);
                     Console.WriteLine(Thread.CurrentThread.Name + " Exit from critical section");
                     log.Info("AddSchedule after locking");
+                }
+            }
+        }
+
+        public AccountResponse UpdateSchedule(int id, UpdateScheduleRequest scheduleReq)
+        {
+            log.Info("UpdateSchedule before locking");
+            Monitor.Enter(lockObject);
+
+            using (IDbContextTransaction transaction = _context.Database.BeginTransaction())
+            {
+                try
+                {
+                    var account = getAccount(id);
+                    var newSchedule = new Schedule();
+                    newSchedule = _mapper.Map<Schedule>(scheduleReq);
+                    //account.Schedules.Add(newSchedule);
+                    
+                    foreach (var schedule in account.Schedules)
+                    {
+                        if(schedule.Date.CompareTo(scheduleReq.Date) == 0 && schedule.UserFunction == scheduleReq.UserFunction)
+                        {
+                            schedule.Date = scheduleReq.NewDate;
+                            schedule.UserFunction = scheduleReq.NewUserFunction;
+                            break;
+                        }
+                    }
+                    _context.Accounts.Update(account);
+                    _context.SaveChanges();
+
+                    AccountResponse response = _mapper.Map<AccountResponse>(account);
+
+                    transaction.Commit();
+
+                    return response;
+                }
+                catch (Exception ex)
+                {
+                    transaction.Rollback();
+                    Console.WriteLine(Thread.CurrentThread.Name + "Error occurred.");
+                    throw ex;
+                }
+                finally
+                {
+                    Monitor.Exit(lockObject);
+                    Console.WriteLine(Thread.CurrentThread.Name + " Exit from critical section");
+                    log.Info("UpdateSchedule after locking");
                 }
             }
         }

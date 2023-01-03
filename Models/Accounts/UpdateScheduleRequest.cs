@@ -11,10 +11,11 @@ namespace WebApi.Models.Accounts
 
         [Required]
         public DateTime Date { get; set; }
-
+        public DateTime NewDate { get; set; }
         [Required]
         public Boolean Required { get; set; }
         public Boolean UserAvailability { get; set; }
         public string UserFunction { get; set; }
+        public string NewUserFunction { get; set; }
     }
 }

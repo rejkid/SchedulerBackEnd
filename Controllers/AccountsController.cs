@@ -210,6 +210,18 @@ public class UserFriendlyException: Exception
         }
 
         [Authorize]
+        [HttpPost("update-schedule/{id}")]
+        public ActionResult<AccountResponse> UpdateSchedule(int id, UpdateScheduleRequest schedule)
+        {
+            // users can update their own account and admins can update any account
+            if (id != Account.Id && Account.Role != Role.Admin)
+                return Unauthorized(new { message = "Unauthorized" });
+
+            var account = _accountService.UpdateSchedule(id, schedule);
+            return Ok(account);
+        }
+
+        [Authorize]
         [HttpPost("delete-schedule/{id}")]
         public ActionResult<AccountResponse> DeleteSchedule(int id, UpdateScheduleRequest schedule)
         {
