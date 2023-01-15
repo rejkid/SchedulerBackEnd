@@ -232,7 +232,7 @@ namespace WebApi.Services
                     if (_context.Accounts.Any(x => x.Email == model.Email && x.DOB == model.Dob))
                     {
                         // send already registered error in email to prevent account enumeration
-                        sendAlreadyRegisteredEmail(model.Email, origin);
+                        sendAlreadyRegisteredEmail(model.Email, model.Dob.ToString(), origin);
                         transaction.Commit();
                         return;
                     }
@@ -587,7 +587,7 @@ namespace WebApi.Services
                 {
                     // validate
                     if (_context.Accounts.Any(x => x.Email == model.Email && x.DOB == model.Dob))
-                        throw new AppException($"Email '{model.Email}' is already registered");
+                        throw new AppException($"Email '{model.Email}' DOB: '{model.Dob}' is already registered");
 
                     // map model to new account object
                     var account = _mapper.Map<Account>(model);
@@ -1333,7 +1333,7 @@ namespace WebApi.Services
             );
         }
 
-        private void sendAlreadyRegisteredEmail(string email, string origin)
+        private void sendAlreadyRegisteredEmail(string email, string dob, string origin)
         {
             string message;
             if (!string.IsNullOrEmpty(origin))
@@ -1345,7 +1345,7 @@ namespace WebApi.Services
                 to: email,
                 subject: "Sign-up Verification API - Email Already Registered",
                 html: $@"<h4>Email Already Registered</h4>
-                         <p>Your email <strong>{email}</strong> is already registered.</p>
+                         <p>Your email <strong>{email}</strong>  DOB: {dob} is already registered.</p>
                          {message}"
             );
         }
