@@ -688,6 +688,11 @@ namespace WebApi.Services
                     {
                         _context.Schedules.RemoveRange(toRemove);
                     }
+                    else
+                    {
+                        log.Info("DeleteSchedule got NULL from Schedules");
+                        throw new AppException("The schedule has been already deleted");
+                    }
 
                     account.Updated = DateTime.UtcNow;
                     _context.SaveChanges();
@@ -919,6 +924,7 @@ namespace WebApi.Services
                     {
                         log.WarnFormat("Schedule did not exist in the schdule list for {0}. Date {1} function {2}",
                             account.FirstName, scheduleReq.Date, scheduleReq.UserFunction);
+                        throw new AppException("The schedule has been already removed");
                     }
                     transaction.Commit();
                     return _mapper.Map<AccountResponse>(account);
