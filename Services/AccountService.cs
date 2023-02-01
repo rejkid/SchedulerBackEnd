@@ -1169,8 +1169,6 @@ namespace WebApi.Services
         }
         private void SendEmail2AllRoles(Account a, Schedule schedule)
         {
-            string message = schedule.UserFunction + " " + a.FirstName + " "
-                + a.LastName + " is unable to attend their duties on " + schedule.Date;
             var accountAll = _context.Accounts.ToList();
             foreach (var account in accountAll)
             {
@@ -1178,13 +1176,17 @@ namespace WebApi.Services
                 {
                     if (f.UserFunction == schedule.UserFunction)
                     {
+                        string message = $@"<i>{a.FirstName} {a.LastName}</i> is unable to attend their duties on " + schedule.Date;
+                        string subject = $@"{account.FirstName} {account.LastName}, {f.UserFunction}" + " is needed";
                         _emailService.Send(
                             to: account.Email,
-                            subject: $@"{f.UserFunction}" + " is needed",
-                            html: $@"<i>{a.FirstName} {a.LastName}</i> is unable to attend their duties on " + schedule.Date
-
+                            subject: subject,
+                            html: message
                         );
-                        log.Info("Message sent: " + message);
+                        log.InfoFormat("Subject Sent: {0} Message sent: {1}",
+                            subject,
+                            message);
+
                         break;
                     }
                 }
