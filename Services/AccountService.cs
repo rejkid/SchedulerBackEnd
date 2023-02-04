@@ -1183,10 +1183,6 @@ namespace WebApi.Services
                             subject: subject,
                             html: message
                         );
-                        log.InfoFormat("Subject Sent: {0} Message sent: {1}",
-                            subject,
-                            message);
-
                         break;
                     }
                 }

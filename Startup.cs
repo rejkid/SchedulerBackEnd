@@ -12,6 +12,15 @@ using Microsoft.Extensions.Hosting;
 
 using log4net;
 using log4net.Config;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Google.Apis.Auth.AspNetCore3;
+using Google.Apis.Auth.OAuth2;
+using MailKit.Net.Imap;
+using MailKit.Security;
+using Microsoft.AspNetCore.Mvc;
+using System.IO;
+using System.Threading.Tasks;
+using Google.Apis.Drive.v3;
 
 [assembly: log4net.Config.XmlConfigurator(ConfigFile = "log4net.config", Watch = true)]
 namespace WebApi
@@ -40,12 +49,34 @@ namespace WebApi
             services.AddAutoMapper(AppDomain.CurrentDomain.GetAssemblies());
             services.AddSwaggerGen();
 
-            // JD
-            // var builder = new ConfigurationBuilder()
-            //    .AddJsonFile($"appsettings.json", true, true);
-            // var config = builder.Build();
-            // var connectionString = config["Roles"];
-            // JD
+            /* Add authenticate */
+            //services.AddAuthentication(options =>
+            //{
+            //    // This forces challenge results to be handled by Google OpenID Handler, so there's no
+            //    // need to add an AccountController that emits challenges for Login.
+            //    options.DefaultChallengeScheme = GoogleOpenIdConnectDefaults.AuthenticationScheme;
+
+            //    // This forces forbid results to be handled by Google OpenID Handler, which checks if
+            //    // extra scopes are required and does automatic incremental auth.
+            //    options.DefaultForbidScheme = GoogleOpenIdConnectDefaults.AuthenticationScheme;
+
+            //    // Default scheme that will handle everything else.
+            //    // Once a user is authenticated, the OAuth2 token info is stored in cookies.
+            //    options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+            //})
+            //.AddCookie(options =>
+            //{
+            //    options.ExpireTimeSpan = TimeSpan.FromMinutes(5);
+            //})
+            //.AddGoogleOpenIdConnect(options =>
+            //{
+            //    var secrets = GoogleClientSecrets.FromFile("client_secret.json").Secrets;
+            //    options.ClientId = secrets.ClientId;
+            //    options.ClientSecret = secrets.ClientSecret;
+            //});
+
+            /* End authenticate */
+
 
             // configure strongly typed settings object
             services.Configure<AppSettings>(Configuration.GetSection("AppSettings"));
@@ -71,11 +102,17 @@ namespace WebApi
             app.UseSwagger();
             app.UseSwaggerUI(x => x.SwaggerEndpoint("/swagger/v1/swagger.json", "ASP.NET Core Sign-up and Verification API"));
 
-            // JD
-            //app.MapGet("/helloworld", () => "Hello World!").RequireAuthorization("AtLeast21");
-            // JD
-
             app.UseRouting();
+
+            /* Start Adding authentication */
+            //app.UseHttpsRedirection();
+            //app.UseStaticFiles();
+
+            ////app.UseRouting();
+
+            //app.UseAuthentication();
+            //app.UseAuthorization();
+            /* End Adding authentication */
 
             // global cors policy
             app.UseCors(x => x
@@ -91,6 +128,20 @@ namespace WebApi
             app.UseMiddleware<JwtMiddleware>();
 
             app.UseEndpoints(x => x.MapControllers());
+        }
+
+        [GoogleScopedAuthorize(DriveService.ScopeConstants.DriveReadonly)]
+        public async Task AuthenticateAsync([FromServices] IGoogleAuthProvider auth)
+        {
+            GoogleCredential? googleCred = await auth.GetCredentialAsync();
+            string token = await googleCred.UnderlyingCredential.GetAccessTokenForRequestAsync();
+
+            var oauth2 = new SaslMechanismOAuth2("UserEmail", token);
+
+            using var emailClient = new ImapClient();
+            await emailClient.ConnectAsync("imap.gmail.com", 993, SecureSocketOptions.SslOnConnect);
+            await emailClient.AuthenticateAsync(oauth2);
+            await emailClient.DisconnectAsync(true);
         }
     }
 }
