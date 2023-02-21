@@ -9,7 +9,9 @@
     <PackageReference Include="BCrypt.Net-Next" Version="4.0.0" />
     <PackageReference Include="Google.Apis.Auth" Version="1.59.0" />
     <PackageReference Include="Google.Apis.Auth.AspNetCore3" Version="1.59.0" />
+    <PackageReference Include="Google.Apis.Calendar.v3" Version="1.59.0.2759" />
     <PackageReference Include="Google.Apis.Drive.v3" Version="1.59.0.2922" />
+    <PackageReference Include="Google.Apis.Gmail.v1" Version="1.59.0.2944" />
     <PackageReference Include="log4net" Version="2.0.14" />
     <PackageReference Include="MailKit" Version="2.8.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="3.1.6" />

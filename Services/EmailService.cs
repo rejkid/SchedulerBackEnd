@@ -37,35 +37,6 @@ namespace WebApi.Services
                 email.Subject = subject;
                 email.Body = new TextPart(TextFormat.Html) { Text = html };
 
-                /* Start Adding security */
-                //const string GMailAccount = "rejkid@gmail.com";
-
-                //var clientSecrets = new ClientSecrets
-                //{
-                //    ClientId = "99280265451-a4rob8slq8hc6a83vu5m6egfhrl63tp4.apps.googleusercontent.com",
-                //    ClientSecret = "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"
-                //};
-
-
-
-
-                //var certificate = new X509Certificate2(@"C:\path\to\certificate.p12", "password", X509KeyStorageFlags.Exportable);
-                //var credential = new ServiceAccountCredential(new ServiceAccountCredential
-                //    .Initializer("your-developer-id@developer.gserviceaccount.com")
-                //{
-                //    // Note: other scopes can be found here: https://developers.google.com/gmail/api/auth/scopes
-                //    Scopes = new[] { "https://mail.google.com/" },
-                //    User = "username@gmail.com"
-                //}.FromCertificate(certificate));
-
-                ////You can also use FromPrivateKey(privateKey) where privateKey
-                //// is the value of the field 'private_key' in your serviceName.json file
-
-                //bool result = await credential.RequestAccessTokenAsync(cancel.Token);
-
-                // Note: result will be true if the access token was received successfully
-                /* End Adding security */
-
 
                 // send email
                 using var smtp = new SmtpClient();

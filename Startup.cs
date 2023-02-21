@@ -21,6 +21,8 @@ using Microsoft.AspNetCore.Mvc;
 using System.IO;
 using System.Threading.Tasks;
 using Google.Apis.Drive.v3;
+using System.Collections.Generic;
+using Google.Apis.Gmail.v1.Data;
 
 [assembly: log4net.Config.XmlConfigurator(ConfigFile = "log4net.config", Watch = true)]
 namespace WebApi
@@ -128,20 +130,6 @@ namespace WebApi
             app.UseMiddleware<JwtMiddleware>();
 
             app.UseEndpoints(x => x.MapControllers());
-        }
-
-        [GoogleScopedAuthorize(DriveService.ScopeConstants.DriveReadonly)]
-        public async Task AuthenticateAsync([FromServices] IGoogleAuthProvider auth)
-        {
-            GoogleCredential? googleCred = await auth.GetCredentialAsync();
-            string token = await googleCred.UnderlyingCredential.GetAccessTokenForRequestAsync();
-
-            var oauth2 = new SaslMechanismOAuth2("UserEmail", token);
-
-            using var emailClient = new ImapClient();
-            await emailClient.ConnectAsync("imap.gmail.com", 993, SecureSocketOptions.SslOnConnect);
-            await emailClient.AuthenticateAsync(oauth2);
-            await emailClient.DisconnectAsync(true);
         }
     }
 }
