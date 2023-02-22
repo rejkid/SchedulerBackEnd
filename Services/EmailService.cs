@@ -5,9 +5,15 @@ using MailKit.Security;
 using Microsoft.Extensions.Options;
 using MimeKit;
 using MimeKit.Text;
+using System.Security.Cryptography;
+using System;
 using System.Security.Cryptography.X509Certificates;
+using System.Text;
 using System.Threading.Channels;
 using WebApi.Helpers;
+using System.IO;
+using System.Threading.Tasks;
+using Org.BouncyCastle.Security;
 
 namespace WebApi.Services
 {
@@ -18,12 +24,16 @@ namespace WebApi.Services
 
     public class EmailService : IEmailService
     {
+        public static string key = "b13ca5898a4e4133bbce2ea231571916";
+
         private static readonly ILog log = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
         private readonly AppSettings _appSettings;
+        private string Password="";
 
         public EmailService(IOptions<AppSettings> appSettings)
         {
             _appSettings = appSettings.Value;
+            Password = AesOperation.DecryptString(key, _appSettings.SmtpPass);
         }
 
         public void Send(string to, string subject, string html, string from = null)
@@ -43,7 +53,8 @@ namespace WebApi.Services
 
 
                 smtp.Connect(_appSettings.SmtpHost, _appSettings.SmtpPort, SecureSocketOptions.StartTls);
-                smtp.Authenticate(_appSettings.SmtpUser, _appSettings.SmtpPass);
+                
+                smtp.Authenticate(_appSettings.SmtpUser, Password);
                 smtp.Send(email);
                 smtp.Disconnect(true);
                 log.InfoFormat("Success sending e-mail \n Subject: {0} Message: {1} to: {2}",
