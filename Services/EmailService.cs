@@ -14,6 +14,7 @@ using WebApi.Helpers;
 using System.IO;
 using System.Threading.Tasks;
 using Org.BouncyCastle.Security;
+using GenerateEncryptedPassword;
 
 namespace WebApi.Services
 {
@@ -24,7 +25,6 @@ namespace WebApi.Services
 
     public class EmailService : IEmailService
     {
-        public static string key = "b13ca5898a4e4133bbce2ea231571916";
 
         private static readonly ILog log = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
         private readonly AppSettings _appSettings;
@@ -33,7 +33,7 @@ namespace WebApi.Services
         public EmailService(IOptions<AppSettings> appSettings)
         {
             _appSettings = appSettings.Value;
-            Password = AesOperation.DecryptString(key, _appSettings.SmtpPass);
+            Password = AesOperation.DecryptString(GenerateEncryptedPassword.Program.symetricKey, _appSettings.SmtpPass);
         }
 
         public void Send(string to, string subject, string html, string from = null)
