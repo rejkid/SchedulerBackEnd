@@ -1185,7 +1185,7 @@ namespace WebApi.Services
                 {
                     if (f.UserFunction == schedule.UserFunction)
                     {
-                        string message = $@"<i>{a.FirstName} {a.LastName}</i> is unable to attend their duties on " + schedule.Date;
+                        string message = $@"<i>{a.FirstName} {a.LastName}</i> is unable to attend their duties on " + schedule.Date.ToString("yyyy’-‘MM’-‘dd’ ’HH’:’mm’:’ss");
                         string subject = $@"{account.FirstName} {account.LastName}, {f.UserFunction}" + " is needed";
                         _emailService.Send(
                             to: account.Email,
