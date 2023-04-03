@@ -47,3 +47,6 @@ WebApiDatabase.db
 /.vs
 /instructions.docx
 /packages
+/Properties
+/wwwroot
+/lib

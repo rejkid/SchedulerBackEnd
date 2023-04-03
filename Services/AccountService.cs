@@ -21,6 +21,8 @@ using System.Threading;
 using log4net;
 using Microsoft.EntityFrameworkCore.Storage;
 using System.Security.Policy;
+using Microsoft.AspNetCore.SignalR;
+using WebApi.Hub;
 
 namespace WebApi.Services
 {
@@ -69,17 +71,19 @@ namespace WebApi.Services
         private readonly AppSettings _appSettings;
         private readonly IEmailService _emailService;
         static readonly object lockObject = new object();
-
+        private readonly IHubContext<MessageHub, IMessageHubClient> _hubContext;
         public AccountService(
             DataContext context,
             IMapper mapper,
             IOptions<AppSettings> appSettings,
-            IEmailService emailService)
+            IEmailService emailService,
+            IHubContext<MessageHub, IMessageHubClient> hubContext)
         {
             _context = context;
             _mapper = mapper;
             _appSettings = appSettings.Value;
             _emailService = emailService;
+            _hubContext = hubContext;
         }
 
         public AuthenticateResponse Authenticate(AuthenticateRequest model, string ipAddress)
@@ -696,6 +700,7 @@ namespace WebApi.Services
 
                     account.Updated = DateTime.UtcNow;
                     _context.SaveChanges();
+                    _hubContext.Clients.All.SendUpdate();
 
                     AccountResponse response = _mapper.Map<AccountResponse>(account);
 
@@ -732,6 +737,7 @@ namespace WebApi.Services
                     account.Schedules.Add(newSchedule);
                     _context.Accounts.Update(account);
                     _context.SaveChanges();
+                    _hubContext.Clients.All.SendUpdate();
 
                     AccountResponse response = _mapper.Map<AccountResponse>(account);
 
@@ -776,6 +782,7 @@ namespace WebApi.Services
                     }
                     _context.Accounts.Update(account);
                     _context.SaveChanges();
+                    _hubContext.Clients.All.SendUpdate();
 
                     AccountResponse response = _mapper.Map<AccountResponse>(account);
 
@@ -914,7 +921,8 @@ namespace WebApi.Services
                         account.Updated = DateTime.UtcNow;
                         _context.Accounts.Update(account);
                         _context.SaveChanges();
-                        
+                        _hubContext.Clients.All.SendUpdate();
+
                         if (autEmail)
                         {
                             SendEmail2AllRoles(account, toRemove);
@@ -972,6 +980,7 @@ namespace WebApi.Services
                         account.Schedules.Add(schedule);
                         _context.Accounts.Update(account);
                         _context.SaveChanges();
+                        _hubContext.Clients.All.SendUpdate();
 
                         AccountResponse response = _mapper.Map<AccountResponse>(account);
 

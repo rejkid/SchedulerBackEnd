@@ -23,6 +23,7 @@ using System.Threading.Tasks;
 using Google.Apis.Drive.v3;
 using System.Collections.Generic;
 using Google.Apis.Gmail.v1.Data;
+using WebApi.Hub;
 
 [assembly: log4net.Config.XmlConfigurator(ConfigFile = "log4net.config", Watch = true)]
 namespace WebApi
@@ -51,6 +52,8 @@ namespace WebApi
             services.AddAutoMapper(AppDomain.CurrentDomain.GetAssemblies());
             services.AddSwaggerGen();
 
+            services.AddSignalR();
+            
             /* Add authenticate */
             //services.AddAuthentication(options =>
             //{
@@ -130,6 +133,12 @@ namespace WebApi
             app.UseMiddleware<JwtMiddleware>();
 
             app.UseEndpoints(x => x.MapControllers());
+
+            app.UseEndpoints(endpoints =>
+            {
+                endpoints.MapControllers();
+                endpoints.MapHub<MessageHub>("/update");
+            });
         }
     }
 }
