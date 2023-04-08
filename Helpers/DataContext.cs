@@ -1,3 +1,4 @@
+using log4net;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using WebApi.Entities;
@@ -7,6 +8,7 @@ namespace WebApi.Helpers
 {
     public class DataContext : DbContext
     {
+        private static readonly ILog log = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
         public DbSet<Account> Accounts { get; set; }
         public DbSet<Schedule> Schedules { get; set; }
 

@@ -23,6 +23,13 @@ namespace WebApi.Entities
         public DateTime Created { get; set; }
         public DateTime? Updated { get; set; }
 
+        // Notification section
+        public bool NotifyWeekBefore { get; set; } = true;
+        public bool NotifiedWeekBefore { get; set; } = false;
+        public bool NotifyThreeDaysBefore { get; set; } = true;
+        public bool NotifiedThreeDaysBefore { get; set; } = false;
+        // End of Notification section
+
         public List<Schedule> Schedules { get; set; }
         public List<Function> UserFunctions { get; set; }
         public List<RefreshToken> RefreshTokens { get; set; }
