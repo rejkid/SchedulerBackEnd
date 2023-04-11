@@ -40,12 +40,6 @@ namespace WebApi.Migrations
                     b.Property<string>("LastName")
                         .HasColumnType("TEXT");
 
-                    b.Property<bool>("NotifiedThreeDaysBefore")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("NotifiedWeekBefore")
-                        .HasColumnType("INTEGER");
-
                     b.Property<bool>("NotifyThreeDaysBefore")
                         .HasColumnType("INTEGER");
 
@@ -114,6 +108,12 @@ namespace WebApi.Migrations
 
                     b.Property<DateTime>("Date")
                         .HasColumnType("TEXT");
+
+                    b.Property<bool>("NotifiedThreeDaysBefore")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("NotifiedWeekBefore")
+                        .HasColumnType("INTEGER");
 
                     b.Property<bool>("Required")
                         .HasColumnType("INTEGER");

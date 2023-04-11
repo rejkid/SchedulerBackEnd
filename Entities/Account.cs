@@ -25,9 +25,7 @@ namespace WebApi.Entities
 
         // Notification section
         public bool NotifyWeekBefore { get; set; } = true;
-        public bool NotifiedWeekBefore { get; set; } = false;
         public bool NotifyThreeDaysBefore { get; set; } = true;
-        public bool NotifiedThreeDaysBefore { get; set; } = false;
         // End of Notification section
 
         public List<Schedule> Schedules { get; set; }

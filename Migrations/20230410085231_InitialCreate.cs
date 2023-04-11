@@ -29,9 +29,7 @@ namespace WebApi.Migrations
                     Created = table.Column<DateTime>(nullable: false),
                     Updated = table.Column<DateTime>(nullable: true),
                     NotifyWeekBefore = table.Column<bool>(nullable: false),
-                    NotifiedWeekBefore = table.Column<bool>(nullable: false),
-                    NotifyThreeDaysBefore = table.Column<bool>(nullable: false),
-                    NotifiedThreeDaysBefore = table.Column<bool>(nullable: false)
+                    NotifyThreeDaysBefore = table.Column<bool>(nullable: false)
                 },
                 constraints: table =>
                 {
@@ -91,6 +89,8 @@ namespace WebApi.Migrations
                     Required = table.Column<bool>(nullable: false),
                     UserAvailability = table.Column<bool>(nullable: false),
                     UserFunction = table.Column<string>(nullable: true),
+                    NotifiedWeekBefore = table.Column<bool>(nullable: false),
+                    NotifiedThreeDaysBefore = table.Column<bool>(nullable: false),
                     AccountId = table.Column<int>(nullable: true)
                 },
                 constraints: table =>

@@ -236,7 +236,7 @@ namespace WebApi.Services
                     if (_context.Accounts.Any(x => x.Email == model.Email && x.DOB == model.Dob))
                     {
                         // send already registered error in email to prevent account enumeration
-                        sendAlreadyRegisteredEmail(model.Email, model.Dob.ToString(), origin);
+                        sendAlreadyRegisteredEmail(model.Email, model.Dob.ToString("yyyy-MM-dd HH:mm"), origin);
                         transaction.Commit();
                         return;
                     }
@@ -777,6 +777,10 @@ namespace WebApi.Services
                         {
                             schedule.Date = scheduleReq.NewDate;
                             schedule.UserFunction = scheduleReq.NewUserFunction;
+
+                            // Reset notification flags
+                            schedule.NotifiedWeekBefore = false;
+                            schedule.NotifiedThreeDaysBefore = false;
                             break;
                         }
                     }
@@ -925,7 +929,7 @@ namespace WebApi.Services
 
                         if (autEmail)
                         {
-                            SendEmail2AllRoles(account, toRemove);
+                            SendEmail2AllRolesAndAdmins(account, toRemove);
                         }
                     }
                     else
@@ -1176,16 +1180,27 @@ namespace WebApi.Services
             _context.SchedulePoolElements.Add(newPoolElement);
             _context.SaveChanges();
         }
-        private void SendEmail2AllRoles(Account a, Schedule schedule)
+        private void SendEmail2AllRolesAndAdmins(Account a, Schedule schedule)
         {
             var accountAll = _context.Accounts.ToList();
             foreach (var account in accountAll)
             {
+                if (account.Role == Role.Admin)
+                {
+                    string message = $@"<i>{a.FirstName} {a.LastName}</i> is unable to attend their duties on " + schedule.Date.ToString("yyyy-MM-dd HH:mm");
+                    string subject = $@"Warning Administrator: {account.FirstName} {account.LastName}, {schedule.UserFunction}" + " is needed";
+                    _emailService.Send(
+                        to: account.Email,
+                        subject: subject,
+                        html: message
+                    );
+                }
+
                 foreach (var f in account.UserFunctions)
                 {
-                    if (f.UserFunction == schedule.UserFunction)
+                    if (f.UserFunction == schedule.UserFunction || f.UserFunction == schedule.UserFunction) // TODO second or to be removed
                     {
-                        string message = $@"<i>{a.FirstName} {a.LastName}</i> is unable to attend their duties on " + schedule.Date.ToString("yyyy’-‘MM’-‘dd’ ’HH’:’mm’:’ss");
+                        string message = $@"<i>{a.FirstName} {a.LastName}</i> is unable to attend their duties on " + schedule.Date.ToString("yyyy-MM-dd HH:mm");
                         string subject = $@"{account.FirstName} {account.LastName}, {f.UserFunction}" + " is needed";
                         _emailService.Send(
                             to: account.Email,
@@ -1327,14 +1342,14 @@ namespace WebApi.Services
             string message;
             if (!string.IsNullOrEmpty(origin))
             {
-                var verifyUrl = $"{origin}/account/verify-email?token={account.VerificationToken}&DOB={account.DOB}";
+                var verifyUrl = $"{origin}/account/verify-email?token={account.VerificationToken}&DOB={account.DOB.ToString("yyyy-MM-dd HH:mm")}";
                 message = $@"<p>Please click the below link to verify your email address:</p>
                              <p><a href=""{verifyUrl}"">{verifyUrl}</a></p>";
             }
             else
             {
                 message = $@"<p>Please use the below token to verify your email address with the <code>/accounts/verify-email</code> api route:</p>
-                             <p><code>{account.VerificationToken+"&"+account.DOB}</code></p>";
+                             <p><code>{account.VerificationToken+"&"+account.DOB.ToString("yyyy-MM-dd HH:mm")}</code></p>";
             }
 
             _emailService.Send(

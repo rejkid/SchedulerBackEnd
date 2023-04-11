@@ -25,12 +25,13 @@ namespace WebApi.Helpers
 
         public static TimeSpan THREE_DAYS_TIMEOUT = new TimeSpan(3, 0, 0, 0);   // Three days time span
         public static TimeSpan WEEK_TIMEOUT = new TimeSpan(7, 0, 0, 0);         // Week time span
-        public static TimeSpan HOUR_TIMEOUT = new TimeSpan(0, 1, 0, 0);         // Week time span
+        public static TimeSpan HOUR_TIMEOUT = new TimeSpan(0, 1, 0, 0);         // Hourly timeout
 
         private static bool terminate = false;
         private static DataContext _context;
         private static IEmailService _emailService;
         private readonly IServiceScope scope;
+        private static IConfiguration _configuration;
         static readonly object lockObject = new object();
 
         public ScheduleFunctionRemainder(IServiceProvider provider)
@@ -38,6 +39,7 @@ namespace WebApi.Helpers
             scope = provider.CreateScope();
             _context = scope.ServiceProvider.GetRequiredService<DataContext>();
             _emailService = scope.ServiceProvider.GetRequiredService<IEmailService>();
+            _configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
         }
 
         // This method is called by the timer delegate.
@@ -47,20 +49,32 @@ namespace WebApi.Helpers
 
             Console.WriteLine("Checking status {0}.", DateTime.Now.ToString("h:mm:ss.fff"));
 
-
-            while (!terminate) // Check if the caller requested cancellation. 
+            do // Check if the caller requested cancellation. 
             {
+
                 DateTime now = DateTime.Now;
                 // Calculate the interval between the two dates.  
                 TimeSpan ts = now - prevDate;
 
                 if (ts.TotalMilliseconds > HOUR_TIMEOUT.TotalMilliseconds) // Send e-mail every hour
                 {
-                    prevDate = DateTime.Now;
-                    SendRemindingEmail4Functions();
+                    DataContext localContext = null;
+                    try
+                    {
+                        localContext = new DataContext(_configuration/*new DbContextOptionsBuilder<DataContext>()*/);
+                        prevDate = DateTime.Now;
+                        SendRemindingEmail4Functions(localContext);
+                    }
+                    finally
+                    {
+                        if (localContext != null)
+                        {
+                            localContext.Dispose();
+                        }
+                    }
                 }
                 Thread.Sleep(500);
-            }
+            } while (!terminate);
 
             if (terminate)
             {
@@ -73,10 +87,10 @@ namespace WebApi.Helpers
         {
             terminate = true;
         }
-        public static void SendRemindingEmail4Functions()
+        public static void SendRemindingEmail4Functions(DataContext context)
         {
             log.Info("\n");
-            var accountAll = _context.Accounts.Include(x => x.UserFunctions).Include(x => x.Schedules).ToList();
+            var accountAll = context.Accounts.Include(x => x.UserFunctions).Include(x => x.Schedules).ToList();
 
             IEnumerable<Account> query = accountAll.TakeWhile((a) => a.UserFunctions != null);
             foreach (var a in accountAll)
@@ -84,45 +98,40 @@ namespace WebApi.Helpers
 
                 foreach (var s in a.Schedules)
                 {
-                    using (IDbContextTransaction transaction = _context.Database.BeginTransaction())
+                    Monitor.Enter(lockObject);
+                    using (IDbContextTransaction transaction = context.Database.BeginTransaction())
                     {
                         try
                         {
-                            if ((DateTime.Now - s.Date) > WEEK_TIMEOUT && a.NotifiedWeekBefore == false)
+                            if ((s.Date - DateTime.Now) < WEEK_TIMEOUT && a.NotifyWeekBefore == true && s.NotifiedWeekBefore == false)
                             {
-                                string message = $@"<i>{a.FirstName} {a.LastName}</i> is scheduled to attend their duties.";
-                                string subject = $@"Reminder: {a.FirstName} {a.LastName} is {s.UserFunction} on s.Date.ToString(""yyyy-MM-dd HH:mm"")";
+                                string message = $@"<i>This is weekly reminder {a.FirstName} {a.LastName}</i> is scheduled to attend their duties.";
+                                string subject = $@"Reminder: {a.FirstName} {a.LastName} is {s.UserFunction} on {s.Date.ToString("yyyy-MM-dd HH:mm")}";
                                 _emailService.Send(
                                     to: a.Email,
                                     subject: subject,
                                     html: message
                                 );
-                                a.NotifiedWeekBefore = true;
-                                _context.Accounts.Update(a);
-                                _context.SaveChanges();
-
-                                transaction.Commit();
+                                s.NotifiedWeekBefore = true;
                                 log.InfoFormat("Schedule ready for week ahead of reminder for an account is: {0} {1} {2}", a.FirstName, a.LastName, a.Email);
                             }
-                            else if ((DateTime.Now - s.Date) > THREE_DAYS_TIMEOUT && a.NotifiedThreeDaysBefore == false)
+                            if ((s.Date - DateTime.Now) < THREE_DAYS_TIMEOUT && a.NotifyThreeDaysBefore == true && s.NotifiedThreeDaysBefore == false)
                             {
-                                string message = $@"<i>{a.FirstName} {a.LastName}</i> is scheduled to attend their duties.";
-                                string subject = $@"Reminder: {a.FirstName} {a.LastName} is {s.UserFunction} on s.Date.ToString(""yyyy-MM-dd HH:mm"")";
+                                string message = $@"<i>This is three days reminder {a.FirstName} {a.LastName}</i> is scheduled to attend their duties.";
+                                string subject = $@"Reminder: {a.FirstName} {a.LastName} is {s.UserFunction} on {s.Date.ToString("yyyy-MM-dd HH:mm")}";
                                 _emailService.Send(
                                     to: a.Email,
                                     subject: subject,
                                     html: message
                                 );
-                                a.NotifiedThreeDaysBefore = true;
-                                _context.Accounts.Update(a);
-                                _context.SaveChanges();
-
-                                transaction.Commit();
+                                s.NotifiedThreeDaysBefore = true;
                                 log.InfoFormat("Schedule ready for 3 days ahead of reminder for an account is: {0} {1} {2}", a.FirstName, a.LastName, a.Email);
-                            } else
-                            {
-                                log.InfoFormat("Schedule not ready for sending reminder for an account is: {0} {1} {2}", a.FirstName, a.LastName, a.Email);
                             }
+                            context.Accounts.Update(a);
+                            context.SaveChanges();
+
+                            transaction.Commit();
+
                         }
                         catch (Exception ex)
                         {

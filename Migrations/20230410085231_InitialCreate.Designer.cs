@@ -9,7 +9,7 @@ using WebApi.Helpers;
 namespace WebApi.Migrations
 {
     [DbContext(typeof(DataContext))]
-    [Migration("20230407125653_InitialCreate")]
+    [Migration("20230410085231_InitialCreate")]
     partial class InitialCreate
     {
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -41,12 +41,6 @@ namespace WebApi.Migrations
 
                     b.Property<string>("LastName")
                         .HasColumnType("TEXT");
-
-                    b.Property<bool>("NotifiedThreeDaysBefore")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("NotifiedWeekBefore")
-                        .HasColumnType("INTEGER");
 
                     b.Property<bool>("NotifyThreeDaysBefore")
                         .HasColumnType("INTEGER");
@@ -116,6 +110,12 @@ namespace WebApi.Migrations
 
                     b.Property<DateTime>("Date")
                         .HasColumnType("TEXT");
+
+                    b.Property<bool>("NotifiedThreeDaysBefore")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("NotifiedWeekBefore")
+                        .HasColumnType("INTEGER");
 
                     b.Property<bool>("Required")
                         .HasColumnType("INTEGER");
