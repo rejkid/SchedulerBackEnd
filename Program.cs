@@ -1,4 +1,5 @@
 ﻿using AutoMapper.Configuration;
+using log4net;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Hosting;
 using System;
@@ -10,6 +11,7 @@ namespace WebApi
 {
     public class Program
     {
+        private static readonly ILog log = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
         public static void Main(string[] args)
         {
             CancellationTokenSource tokenSource = new CancellationTokenSource(); // Create a token source.
@@ -18,7 +20,7 @@ namespace WebApi
             // timer callback has been reached.
             //var autoEvent = new AutoResetEvent(false);
             IHost ihost = CreateHostBuilder(args).Build();
-            var services = ihost.Services.GetService(typeof(IServiceProvider));
+            //var services = ihost.Services.GetService(typeof(IServiceProvider));
 
             ScheduleFunctionRemainder scheduleFunctionRemainder = new ScheduleFunctionRemainder(ihost.Services);
             // Create a thread
@@ -26,6 +28,8 @@ namespace WebApi
 
             // Start thread
             backgroundThread.Start();
+
+            log.Info("Schedule reminder started");
 
             //Timer stateTimer = new Timer(scheduleFunctionRemainder.CheckStatus, autoEvent, 0, 1000 * 60 * 5);
             ihost.Run();
