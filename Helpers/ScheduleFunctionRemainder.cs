@@ -114,6 +114,10 @@ namespace WebApi.Helpers
                                 );
                                 s.NotifiedWeekBefore = true;
                                 log.InfoFormat("Schedule ready for week ahead of reminder for an account is: {0} {1} {2}", a.FirstName, a.LastName, a.Email);
+                            } else
+                            {
+                                log.InfoFormat("Schedule not ready for week ahead of reminder for an account is: {0} {1} {2}   (s.Date - DateTime.Now)= {3} a.NotifyWeekBefore == {4} && s.NotifiedWeekBefore = {5}",
+                                    a.FirstName, a.LastName, a.Email, (s.Date - DateTime.Now).TotalMilliseconds, a.NotifyWeekBefore, s.NotifiedWeekBefore);
                             }
                             if ((s.Date - DateTime.Now) < THREE_DAYS_TIMEOUT && a.NotifyThreeDaysBefore == true && s.NotifiedThreeDaysBefore == false)
                             {
@@ -126,6 +130,11 @@ namespace WebApi.Helpers
                                 );
                                 s.NotifiedThreeDaysBefore = true;
                                 log.InfoFormat("Schedule ready for 3 days ahead of reminder for an account is: {0} {1} {2}", a.FirstName, a.LastName, a.Email);
+                            }
+                            else
+                            {
+                                log.InfoFormat("Schedule not ready for for 3 days ahead of reminder for an account is: {0} {1} {2}   (s.Date - DateTime.Now)= {3} a.NotifyThreeDaysBefore == {4} && s.NotifiedThreeDaysBefore = {5}",
+                                    a.FirstName, a.LastName, a.Email, (s.Date - DateTime.Now).TotalMilliseconds, a.NotifyThreeDaysBefore, s.NotifiedThreeDaysBefore);
                             }
                             context.Accounts.Update(a);
                             context.SaveChanges();
