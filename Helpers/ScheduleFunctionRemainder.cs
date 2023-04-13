@@ -25,7 +25,7 @@ namespace WebApi.Helpers
 
         public static TimeSpan THREE_DAYS_TIMEOUT = new TimeSpan(3, 0, 0, 0);   // Three days time span
         public static TimeSpan WEEK_TIMEOUT = new TimeSpan(7, 0, 0, 0);         // Week time span
-        public static TimeSpan HOUR_TIMEOUT = new TimeSpan(0, 1, 0, 0);         // Hourly timeout
+        public static TimeSpan HOUR_TIMEOUT = new TimeSpan(0, /*1*/0, /*0*/1, 0);         // Hourly timeout
 
         private static bool terminate = false;
         private static DataContext _context;
@@ -103,7 +103,17 @@ namespace WebApi.Helpers
                     {
                         try
                         {
-                            if ((s.Date - DateTime.Now) < WEEK_TIMEOUT && a.NotifyWeekBefore == true && s.NotifiedWeekBefore == false)
+                            string clientTimeZoneId = _configuration["AppSettings:ClientTimeZoneId"];
+                            TimeZoneInfo.ConvertTime(DateTime.Now, TimeZoneInfo.FindSystemTimeZoneById(clientTimeZoneId));
+
+                            DateTime scheduleDate = TimeZoneInfo.ConvertTime(s.Date, TimeZoneInfo.FindSystemTimeZoneById(clientTimeZoneId));
+                            DateTime now = TimeZoneInfo.ConvertTime(DateTime.Now, TimeZoneInfo.FindSystemTimeZoneById(clientTimeZoneId));
+
+                            log.InfoFormat("Schedule `{0}` is now {1}ms ahead of execution (negative means it's over)",
+                                s.Date,
+                                (scheduleDate - now).TotalMilliseconds);
+
+                            if ((scheduleDate - now) < WEEK_TIMEOUT && a.NotifyWeekBefore == true && s.NotifiedWeekBefore == false)
                             {
                                 string message = $@"<i>This is weekly reminder {a.FirstName} {a.LastName}</i> is scheduled to attend their duties.";
                                 string subject = $@"Reminder: {a.FirstName} {a.LastName} is {s.UserFunction} on {s.Date.ToString("yyyy-MM-dd HH:mm")}";
@@ -114,12 +124,8 @@ namespace WebApi.Helpers
                                 );
                                 s.NotifiedWeekBefore = true;
                                 log.InfoFormat("Schedule ready for week ahead of reminder for an account is: {0} {1} {2}", a.FirstName, a.LastName, a.Email);
-                            } else
-                            {
-                                log.InfoFormat("Schedule not ready for week ahead of reminder for an account is: {0} {1} {2}   (s.Date - DateTime.Now)= {3} a.NotifyWeekBefore == {4} && s.NotifiedWeekBefore = {5}",
-                                    a.FirstName, a.LastName, a.Email, (s.Date - DateTime.Now).TotalMilliseconds, a.NotifyWeekBefore, s.NotifiedWeekBefore);
-                            }
-                            if ((s.Date - DateTime.Now) < THREE_DAYS_TIMEOUT && a.NotifyThreeDaysBefore == true && s.NotifiedThreeDaysBefore == false)
+                            } 
+                            if ((scheduleDate - now) < THREE_DAYS_TIMEOUT && a.NotifyThreeDaysBefore == true && s.NotifiedThreeDaysBefore == false)
                             {
                                 string message = $@"<i>This is three days reminder {a.FirstName} {a.LastName}</i> is scheduled to attend their duties.";
                                 string subject = $@"Reminder: {a.FirstName} {a.LastName} is {s.UserFunction} on {s.Date.ToString("yyyy-MM-dd HH:mm")}";
@@ -131,16 +137,10 @@ namespace WebApi.Helpers
                                 s.NotifiedThreeDaysBefore = true;
                                 log.InfoFormat("Schedule ready for 3 days ahead of reminder for an account is: {0} {1} {2}", a.FirstName, a.LastName, a.Email);
                             }
-                            else
-                            {
-                                log.InfoFormat("Schedule not ready for for 3 days ahead of reminder for an account is: {0} {1} {2}   (s.Date - DateTime.Now)= {3} a.NotifyThreeDaysBefore == {4} && s.NotifiedThreeDaysBefore = {5}",
-                                    a.FirstName, a.LastName, a.Email, (s.Date - DateTime.Now).TotalMilliseconds, a.NotifyThreeDaysBefore, s.NotifiedThreeDaysBefore);
-                            }
                             context.Accounts.Update(a);
                             context.SaveChanges();
 
                             transaction.Commit();
-
                         }
                         catch (Exception ex)
                         {
