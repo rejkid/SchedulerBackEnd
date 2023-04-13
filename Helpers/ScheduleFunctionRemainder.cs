@@ -106,16 +106,19 @@ namespace WebApi.Helpers
                             string clientTimeZoneId = _configuration["AppSettings:ClientTimeZoneId"];
                             TimeZoneInfo.ConvertTime(DateTime.Now, TimeZoneInfo.FindSystemTimeZoneById(clientTimeZoneId));
 
-                            DateTime scheduleDate = TimeZoneInfo.ConvertTime(s.Date, TimeZoneInfo.FindSystemTimeZoneById(clientTimeZoneId));
+                            DateTime scheduleDate = s.Date; // s.Date is already client date
                             DateTime now = TimeZoneInfo.ConvertTime(DateTime.Now, TimeZoneInfo.FindSystemTimeZoneById(clientTimeZoneId));
+                            log.InfoFormat("scheduleDate {0} now {1}",
+                                scheduleDate,
+                                now);
 
-                            log.InfoFormat("Schedule `{0}` is now {1}ms ahead of execution (negative means it's over)",
+                            log.InfoFormat("Schedule `{0}` is now {1} days ahead of execution (negative means it's over)",
                                 s.Date,
-                                (scheduleDate - now).TotalMilliseconds);
+                                (scheduleDate - now).TotalMilliseconds / (1000*60*60*24));
 
                             if ((scheduleDate - now) < WEEK_TIMEOUT && a.NotifyWeekBefore == true && s.NotifiedWeekBefore == false)
                             {
-                                string message = $@"<i>This is weekly reminder {a.FirstName} {a.LastName}</i> is scheduled to attend their duties.";
+                                string message = $@"This isa  weekly reminder that <i>{a.FirstName} {a.LastName}</i> is scheduled to attend their duties.";
                                 string subject = $@"Reminder: {a.FirstName} {a.LastName} is {s.UserFunction} on {s.Date.ToString("yyyy-MM-dd HH:mm")}";
                                 _emailService.Send(
                                     to: a.Email,
@@ -127,7 +130,7 @@ namespace WebApi.Helpers
                             } 
                             if ((scheduleDate - now) < THREE_DAYS_TIMEOUT && a.NotifyThreeDaysBefore == true && s.NotifiedThreeDaysBefore == false)
                             {
-                                string message = $@"<i>This is three days reminder {a.FirstName} {a.LastName}</i> is scheduled to attend their duties.";
+                                string message = $@"This is a three days reminder that <i>{a.FirstName} {a.LastName}</i> is scheduled to attend their duties.";
                                 string subject = $@"Reminder: {a.FirstName} {a.LastName} is {s.UserFunction} on {s.Date.ToString("yyyy-MM-dd HH:mm")}";
                                 _emailService.Send(
                                     to: a.Email,
