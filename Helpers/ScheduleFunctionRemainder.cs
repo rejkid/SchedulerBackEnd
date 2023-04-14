@@ -118,7 +118,7 @@ namespace WebApi.Helpers
 
                             if ((scheduleDate - now) < WEEK_TIMEOUT && a.NotifyWeekBefore == true && s.NotifiedWeekBefore == false)
                             {
-                                string message = $@"This isa  weekly reminder that <i>{a.FirstName} {a.LastName}</i> is scheduled to attend their duties.";
+                                string message = $@"This is a weekly reminder that <i>{a.FirstName} {a.LastName}</i> is scheduled to attend their duties.";
                                 string subject = $@"Reminder: {a.FirstName} {a.LastName} is {s.UserFunction} on {s.Date.ToString("yyyy-MM-dd HH:mm")}";
                                 _emailService.Send(
                                     to: a.Email,
@@ -130,7 +130,7 @@ namespace WebApi.Helpers
                             } 
                             if ((scheduleDate - now) < THREE_DAYS_TIMEOUT && a.NotifyThreeDaysBefore == true && s.NotifiedThreeDaysBefore == false)
                             {
-                                string message = $@"This is a three days reminder that <i>{a.FirstName} {a.LastName}</i> is scheduled to attend their duties.";
+                                string message = $@"This is a three-day reminder that <i>{a.FirstName} {a.LastName}</i> is scheduled to attend their duties.";
                                 string subject = $@"Reminder: {a.FirstName} {a.LastName} is {s.UserFunction} on {s.Date.ToString("yyyy-MM-dd HH:mm")}";
                                 _emailService.Send(
                                     to: a.Email,
