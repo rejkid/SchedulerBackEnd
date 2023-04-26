@@ -23,6 +23,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 using System.Security.Policy;
 using Microsoft.AspNetCore.SignalR;
 using WebApi.Hub;
+using System.Runtime.Serialization;
 
 namespace WebApi.Services
 {
@@ -32,7 +33,7 @@ namespace WebApi.Services
         AuthenticateResponse RefreshToken(string token, string ipAddress);
         void RevokeToken(string token, string ipAddress);
         void Register(RegisterRequest model, string origin);
-        void VerifyEmail(VerifyEmailRequest model/*string token, DateTime dob*/);
+        void VerifyEmail(VerifyEmailRequest model);
         void ForgotPassword(ForgotPasswordRequest model, string origin);
         void ValidateResetToken(ValidateResetTokenRequest mode, DateTime dateTimel);
         void ResetPassword(ResetPasswordRequest model);
@@ -278,7 +279,7 @@ namespace WebApi.Services
             }
         }
 
-        public void VerifyEmail(VerifyEmailRequest model/*string token, DateTime dob*/)
+        public void VerifyEmail(VerifyEmailRequest model)
         {
             log.Info("VerifyEmail before locking");
             Monitor.Enter(lockObject);
@@ -287,7 +288,7 @@ namespace WebApi.Services
             {
                 try
                 {
-                    DateTime dateTime = DateTime.Parse(model.Dob);
+                    DateTime dateTime = DateTime.ParseExact(model.Dob, ConstantsDefined.DateTimeFormat, System.Globalization.CultureInfo.InvariantCulture);
                     var account = _context.Accounts.SingleOrDefault(x => x.VerificationToken == model.Token && (DateTime.Compare(x.DOB, dateTime) == 0));
 
                     if (account == null) throw new AppException("Verification failed");
@@ -302,7 +303,8 @@ namespace WebApi.Services
                 catch (Exception ex)
                 {
                     transaction.Rollback();
-                    Console.WriteLine(Thread.CurrentThread.Name + "Error occurred:" + ex.ToString());
+                    Console.WriteLine(Thread.CurrentThread.Name);
+                    log.Error("Error during veryfication:" + ex.Message);
                     throw ex;
                 }
                 finally
