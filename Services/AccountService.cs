@@ -236,7 +236,7 @@ namespace WebApi.Services
                     if (_context.Accounts.Any(x => x.Email == model.Email && x.DOB == model.Dob))
                     {
                         // send already registered error in email to prevent account enumeration
-                        sendAlreadyRegisteredEmail(model.Email, model.Dob.ToString("yyyy-MM-dd HH:mm"), origin);
+                        sendAlreadyRegisteredEmail(model.Email, model.Dob.ToString(ConstantsDefined.DateTimeFormat), origin);
                         transaction.Commit();
                         return;
                     }
@@ -1187,7 +1187,7 @@ namespace WebApi.Services
             {
                 if (account.Role == Role.Admin)
                 {
-                    string message = $@"<i>{a.FirstName} {a.LastName}</i> is unable to attend their duties on " + schedule.Date.ToString("yyyy-MM-dd HH:mm");
+                    string message = $@"<i>{a.FirstName} {a.LastName}</i> is unable to attend their duties on " + schedule.Date.ToString(ConstantsDefined.DateTimeFormat);
                     string subject = $@"Warning Administrator: {account.FirstName} {account.LastName}, {schedule.UserFunction}" + " is needed";
                     _emailService.Send(
                         to: account.Email,
@@ -1200,7 +1200,7 @@ namespace WebApi.Services
                 {
                     if (f.UserFunction == schedule.UserFunction || f.UserFunction == schedule.UserFunction) // TODO second or to be removed
                     {
-                        string message = $@"<i>{a.FirstName} {a.LastName}</i> is unable to attend their duties on " + schedule.Date.ToString("yyyy-MM-dd HH:mm");
+                        string message = $@"<i>{a.FirstName} {a.LastName}</i> is unable to attend their duties on " + schedule.Date.ToString(ConstantsDefined.DateTimeFormat);
                         string subject = $@"{account.FirstName} {account.LastName}, {f.UserFunction}" + " is needed";
                         _emailService.Send(
                             to: account.Email,
@@ -1342,14 +1342,14 @@ namespace WebApi.Services
             string message;
             if (!string.IsNullOrEmpty(origin))
             {
-                var verifyUrl = $"{origin}/account/verify-email?token={account.VerificationToken}&DOB={account.DOB.ToString("yyyy-MM-dd HH:mm")}";
+                var verifyUrl = $"{origin}/account/verify-email?token={account.VerificationToken}&DOB={account.DOB.ToString(ConstantsDefined.DateTimeFormat)}";
                 message = $@"<p>Please click the below link to verify your email address:</p>
                              <p><a href=""{verifyUrl}"">{verifyUrl}</a></p>";
             }
             else
             {
                 message = $@"<p>Please use the below token to verify your email address with the <code>/accounts/verify-email</code> api route:</p>
-                             <p><code>{account.VerificationToken+"&"+account.DOB.ToString("yyyy-MM-dd HH:mm")}</code></p>";
+                             <p><code>{account.VerificationToken+"&"+account.DOB.ToString(ConstantsDefined.DateTimeFormat)}</code></p>";
             }
 
             _emailService.Send(
