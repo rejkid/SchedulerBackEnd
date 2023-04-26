@@ -32,7 +32,7 @@ namespace WebApi.Services
         AuthenticateResponse RefreshToken(string token, string ipAddress);
         void RevokeToken(string token, string ipAddress);
         void Register(RegisterRequest model, string origin);
-        void VerifyEmail(string token, DateTime dob);
+        void VerifyEmail(VerifyEmailRequest model/*string token, DateTime dob*/);
         void ForgotPassword(ForgotPasswordRequest model, string origin);
         void ValidateResetToken(ValidateResetTokenRequest mode, DateTime dateTimel);
         void ResetPassword(ResetPasswordRequest model);
@@ -278,7 +278,7 @@ namespace WebApi.Services
             }
         }
 
-        public void VerifyEmail(string token, DateTime dob)
+        public void VerifyEmail(VerifyEmailRequest model/*string token, DateTime dob*/)
         {
             log.Info("VerifyEmail before locking");
             Monitor.Enter(lockObject);
@@ -287,7 +287,8 @@ namespace WebApi.Services
             {
                 try
                 {
-                    var account = _context.Accounts.SingleOrDefault(x => x.VerificationToken == token && (DateTime.Compare(x.DOB, dob) == 0));
+                    DateTime dateTime = DateTime.Parse(model.Dob);
+                    var account = _context.Accounts.SingleOrDefault(x => x.VerificationToken == model.Token && (DateTime.Compare(x.DOB, dateTime) == 0));
 
                     if (account == null) throw new AppException("Verification failed");
 
@@ -301,7 +302,7 @@ namespace WebApi.Services
                 catch (Exception ex)
                 {
                     transaction.Rollback();
-                    Console.WriteLine(Thread.CurrentThread.Name + "Error occurred.");
+                    Console.WriteLine(Thread.CurrentThread.Name + "Error occurred:" + ex.ToString());
                     throw ex;
                 }
                 finally

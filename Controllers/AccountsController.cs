@@ -112,9 +112,9 @@ public class UserFriendlyException: Exception
         [HttpPost("verify-email")]
         public IActionResult VerifyEmail(VerifyEmailRequest model)
         {
-            log.Info("VerifyEmail before calling Parse");
-            DateTime dateTime = DateTime.Parse(model.Dob);
-            _accountService.VerifyEmail(model.Token, dateTime);
+            //log.Info("VerifyEmail before calling Parse");
+            //DateTime dateTime = DateTime.Parse(model.Dob);
+            _accountService.VerifyEmail(model/*model.Token, dateTime*/);
             return Ok(new { message = "Verification successful, you can now login" });
         }
 
