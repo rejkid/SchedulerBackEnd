@@ -24,6 +24,7 @@ using System.Security.Policy;
 using Microsoft.AspNetCore.SignalR;
 using WebApi.Hub;
 using System.Runtime.Serialization;
+using System.Security.Principal;
 
 namespace WebApi.Services
 {
@@ -236,8 +237,12 @@ namespace WebApi.Services
                     // validate
                     if (_context.Accounts.Any(x => x.Email == model.Email && x.DOB == model.Dob))
                     {
+                        var clientTimeZoneId = _appSettings.ClientTimeZoneId;
+                        var scheduleDate = TimeZoneInfo.ConvertTimeFromUtc(model.Dob, TimeZoneInfo.FindSystemTimeZoneById(clientTimeZoneId));
+
+
                         // send already registered error in email to prevent account enumeration
-                        sendAlreadyRegisteredEmail(model.Email, model.Dob.ToString(ConstantsDefined.DateTimeFormat), origin);
+                        sendAlreadyRegisteredEmail(model.Email, scheduleDate.ToString(ConstantsDefined.DateTimeFormat), origin);
                         transaction.Commit();
                         return;
                     }
@@ -1188,9 +1193,12 @@ namespace WebApi.Services
             var accountAll = _context.Accounts.ToList();
             foreach (var account in accountAll)
             {
+                var clientTimeZoneId = _appSettings.ClientTimeZoneId;
+                var scheduleDate = TimeZoneInfo.ConvertTimeFromUtc(schedule.Date, TimeZoneInfo.FindSystemTimeZoneById(clientTimeZoneId));
+
                 if (account.Role == Role.Admin)
                 {
-                    string message = $@"<i>{a.FirstName} {a.LastName}</i> is unable to attend their duties on " + schedule.Date.ToString(ConstantsDefined.DateTimeFormat);
+                    string message = $@"<i>{a.FirstName} {a.LastName}</i> is unable to attend their duties on " + scheduleDate.ToString(ConstantsDefined.DateTimeFormat);
                     string subject = $@"Warning Administrator: {account.FirstName} {account.LastName}, {schedule.UserFunction}" + " is needed";
                     _emailService.Send(
                         to: account.Email,
@@ -1203,7 +1211,7 @@ namespace WebApi.Services
                 {
                     if (f.UserFunction == schedule.UserFunction || f.UserFunction == schedule.UserFunction) // TODO second or to be removed
                     {
-                        string message = $@"<i>{a.FirstName} {a.LastName}</i> is unable to attend their duties on " + schedule.Date.ToString(ConstantsDefined.DateTimeFormat);
+                        string message = $@"<i>{a.FirstName} {a.LastName}</i> is unable to attend their duties on " + scheduleDate.ToString(ConstantsDefined.DateTimeFormat);
                         string subject = $@"{account.FirstName} {account.LastName}, {f.UserFunction}" + " is needed";
                         _emailService.Send(
                             to: account.Email,
@@ -1343,16 +1351,20 @@ namespace WebApi.Services
         private void sendVerificationEmail(Account account, string origin)
         {
             string message;
+
+            var clientTimeZoneId = _appSettings.ClientTimeZoneId;
+            var scheduleDate = TimeZoneInfo.ConvertTimeFromUtc(account.DOB, TimeZoneInfo.FindSystemTimeZoneById(clientTimeZoneId));
+
             if (!string.IsNullOrEmpty(origin))
             {
-                var verifyUrl = $"{origin}/account/verify-email?token={account.VerificationToken}&DOB={account.DOB.ToString(ConstantsDefined.DateTimeFormat)}";
+                var verifyUrl = $"{origin}/account/verify-email?token={account.VerificationToken}&DOB={scheduleDate.ToString(ConstantsDefined.DateTimeFormat)}";
                 message = $@"<p>Please click the below link to verify your email address:</p>
                              <p><a href=""{verifyUrl}"">{verifyUrl}</a></p>";
             }
             else
             {
                 message = $@"<p>Please use the below token to verify your email address with the <code>/accounts/verify-email</code> api route:</p>
-                             <p><code>{account.VerificationToken+"&"+account.DOB.ToString(ConstantsDefined.DateTimeFormat)}</code></p>";
+                             <p><code>{account.VerificationToken+"&"+ scheduleDate.ToString(ConstantsDefined.DateTimeFormat)}</code></p>";
             }
 
             _emailService.Send(
@@ -1367,6 +1379,7 @@ namespace WebApi.Services
         private void sendAlreadyRegisteredEmail(string email, string dob, string origin)
         {
             string message;
+
             if (!string.IsNullOrEmpty(origin))
                 message = $@"<p>If you don't know your password please visit the <a href=""{origin}/account/forgot-password"">forgot password</a> page.</p>";
             else
@@ -1385,9 +1398,13 @@ namespace WebApi.Services
         private void sendPasswordResetEmail(Account account, string origin)
         {
             string message;
+
+            var clientTimeZoneId = _appSettings.ClientTimeZoneId;
+            var scheduleDate = TimeZoneInfo.ConvertTimeFromUtc(account.DOB, TimeZoneInfo.FindSystemTimeZoneById(clientTimeZoneId));
+
             if (!string.IsNullOrEmpty(origin))
             {
-                var resetUrl = $"{origin}/account/reset-password?token={account.ResetToken}&DOB={System.Web.HttpUtility.UrlEncode(account.DOB.ToString())}";
+                var resetUrl = $"{origin}/account/reset-password?token={account.ResetToken}&DOB={System.Web.HttpUtility.UrlEncode(scheduleDate.ToString())}";
                 message = $@"<p>Please click the below link to reset your password, the link will be valid for 1 day:</p>
                              <p><a href=""{resetUrl}"">{resetUrl}</a></p>";
             }
