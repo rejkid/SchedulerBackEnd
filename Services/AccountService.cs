@@ -293,8 +293,14 @@ namespace WebApi.Services
             {
                 try
                 {
+                    // Convert DOB string to DateTime
                     DateTime dateTime = DateTime.ParseExact(model.Dob, ConstantsDefined.DateTimeFormat, System.Globalization.CultureInfo.InvariantCulture);
-                    var account = _context.Accounts.SingleOrDefault(x => x.VerificationToken == model.Token && (DateTime.Compare(x.DOB, dateTime) == 0));
+
+                    // Convert client DOB to server date time
+                    var clientTimeZoneId = _appSettings.ClientTimeZoneId;
+                    DateTime dob = TimeZoneInfo.ConvertTimeToUtc(dateTime, TimeZoneInfo.FindSystemTimeZoneById(clientTimeZoneId));
+
+                    var account = _context.Accounts.SingleOrDefault(x => x.VerificationToken == model.Token && (DateTime.Compare(x.DOB, dob) == 0));
 
                     if (account == null) throw new AppException("Verification failed");
 
