@@ -36,7 +36,7 @@ namespace WebApi.Services
         void Register(RegisterRequest model, string origin);
         void VerifyEmail(VerifyEmailRequest model);
         void ForgotPassword(ForgotPasswordRequest model, string origin);
-        void ValidateResetToken(ValidateResetTokenRequest mode, DateTime dateTimel);
+        void ValidateResetToken(ValidateResetTokenRequest mode);
         void ResetPassword(ResetPasswordRequest model);
         IEnumerable<AccountResponse> GetAll();
         AccountResponse GetById(int id);
@@ -371,23 +371,27 @@ namespace WebApi.Services
             }
         }
 
-        public void ValidateResetToken(ValidateResetTokenRequest model, DateTime dob)
+        public void ValidateResetToken(ValidateResetTokenRequest model)
         {
             log.Info("ValidateResetToken before locking");
             Monitor.Enter(lockObject);
             try
             {
-                var account = _context.Accounts.SingleOrDefault(x =>
-                    x.ResetToken == model.Token &&
-                    (DateTime.Compare(x.DOB, dob) == 0) &&
-                    x.ResetTokenExpires > DateTime.UtcNow);
+                // Convert model.Dob string to DateTime
+                DateTime dateTime = DateTime.ParseExact(model.Dob, ConstantsDefined.DateTimeFormat, System.Globalization.CultureInfo.InvariantCulture);
+
+                // Convert client DOB to server date time
+                var clientTimeZoneId = _appSettings.ClientTimeZoneId;
+                DateTime dob = TimeZoneInfo.ConvertTimeToUtc(dateTime, TimeZoneInfo.FindSystemTimeZoneById(clientTimeZoneId));
+
+                var account = _context.Accounts.SingleOrDefault(x => x.ResetToken == model.Token && (DateTime.Compare(x.DOB, dob) == 0) && x.ResetTokenExpires > DateTime.UtcNow);
 
                 if (account == null)
                     throw new AppException("Invalid token");
             }
             catch (Exception ex)
             {
-
+                log.InfoFormat("Exception in ValidateResetToken "+ex.Message);
                 Console.WriteLine(Thread.CurrentThread.Name + "Error occurred.");
                 throw ex;
             }
@@ -1410,7 +1414,7 @@ namespace WebApi.Services
 
             if (!string.IsNullOrEmpty(origin))
             {
-                var resetUrl = $"{origin}/account/reset-password?token={account.ResetToken}&DOB={System.Web.HttpUtility.UrlEncode(scheduleDate.ToString())}";
+                var resetUrl = $"{origin}/account/reset-password?token={account.ResetToken}&DOB={System.Web.HttpUtility.UrlEncode(scheduleDate.ToString(ConstantsDefined.DateTimeFormat))}";
                 message = $@"<p>Please click the below link to reset your password, the link will be valid for 1 day:</p>
                              <p><a href=""{resetUrl}"">{resetUrl}</a></p>";
             }

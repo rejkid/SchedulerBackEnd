@@ -128,8 +128,8 @@ public class UserFriendlyException: Exception
         [HttpPost("validate-reset-token")]
         public IActionResult ValidateResetToken(ValidateResetTokenRequest model)
         {
-            DateTime dateTime = DateTime.Parse(model.Dob);
-            _accountService.ValidateResetToken(model, dateTime);
+            
+            _accountService.ValidateResetToken(model);
             return Ok(new { message = "Token is valid" });
         }
 
