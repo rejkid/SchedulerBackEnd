@@ -1399,7 +1399,7 @@ namespace WebApi.Services
                 to: email,
                 subject: "Sign-up Verification API - Email Already Registered",
                 html: $@"<h4>Email Already Registered</h4>
-                         <p>Your email <strong>{email}</strong>  DOB: {dob} is already registered.</p>
+                         <p>Your email <strong>{email}</strong> and DOB: {dob} is already registered.</p>
                          {message}"
             );
         }
