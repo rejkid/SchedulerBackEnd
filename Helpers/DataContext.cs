@@ -10,6 +10,8 @@ namespace WebApi.Helpers
     public class DataContext : DbContext
     {
         private static readonly ILog log = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
+        public DbSet<SystemInfo> SystemInformation { get; set; }
+
         public DbSet<Account> Accounts { get; set; }
         public DbSet<Schedule> Schedules { get; set; }
 

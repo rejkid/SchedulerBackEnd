@@ -14,5 +14,8 @@ namespace WebApi.Entities
         public bool NotifiedThreeDaysBefore { get; set; } = false;
         // End of Notification section
 
+        /* Reward section*/
+        public uint NoOfTimesAssigned { get; set; }
+        public uint NoOfTimesDropped { get; set; }
     }
 }
