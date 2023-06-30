@@ -24,6 +24,7 @@ using Google.Apis.Drive.v3;
 using System.Collections.Generic;
 using Google.Apis.Gmail.v1.Data;
 using WebApi.Hub;
+using System.Text.Json.Serialization;
 
 [assembly: log4net.Config.XmlConfigurator(ConfigFile = "log4net.config", Watch = true)]
 namespace WebApi
@@ -48,7 +49,12 @@ namespace WebApi
         {
             services.AddDbContext<DataContext>();
             services.AddCors();
-            services.AddControllers().AddJsonOptions(x => x.JsonSerializerOptions.IgnoreNullValues = true);
+            //services.AddControllers().AddJsonOptions(x => x.JsonSerializerOptions.IgnoreNullValues = true);
+            services.AddControllers().AddJsonOptions(options =>
+            {
+                options.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
+            });
+
             services.AddAutoMapper(AppDomain.CurrentDomain.GetAssemblies());
             services.AddSwaggerGen();
 

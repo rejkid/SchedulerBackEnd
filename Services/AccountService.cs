@@ -1351,9 +1351,13 @@ namespace WebApi.Services
 
         private string randomTokenString()
         {
-            using var rngCryptoServiceProvider = new RNGCryptoServiceProvider();
+            using var rng = RandomNumberGenerator.Create();
+            //using var rngCryptoServiceProvider = new RNGCryptoServiceProvider(); // OLD
             var randomBytes = new byte[40];
-            rngCryptoServiceProvider.GetBytes(randomBytes);
+
+            rng.GetBytes(randomBytes);
+            //rngCryptoServiceProvider.GetBytes(randomBytes); // OLD
+
             // convert random bytes to hex string
             return BitConverter.ToString(randomBytes).Replace("-", "");
         }
