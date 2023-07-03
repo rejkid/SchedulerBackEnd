@@ -183,6 +183,7 @@ namespace WebApi.Services
                 {
                     transaction.Rollback();
                     Console.WriteLine(Thread.CurrentThread.Name + "Error occurred.");
+                    log.Error("RefreshToken:" + ex.Message);
                     throw ex;
                 }
                 finally
