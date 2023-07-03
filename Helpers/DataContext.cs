@@ -36,7 +36,7 @@ namespace WebApi.Helpers
         }
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            //modelBuilder.Entity<Account>().HasMany(e => e.RefreshTokens).WithOne(e => e.Account).IsRequired();
+            modelBuilder.Entity<Account>().HasMany(e => e.RefreshTokens).WithOne(e => e.Account).IsRequired();
         }
     }
 }
