@@ -96,7 +96,7 @@ namespace WebApi.Services
             {
                 try
                 {
-                    var account = _context.Accounts.SingleOrDefault(x => x.Email == model.Email && x.DOB == model.Dob);
+                    var account = _context.Accounts.Include(x => x.RefreshTokens).SingleOrDefault(x => x.Email == model.Email && x.DOB == model.Dob);
 
                     if (account == null || !account.IsVerified || !BC.Verify(model.Password, account.PasswordHash))
                         throw new AppException("Email, DOB or password is incorrect");
@@ -1248,7 +1248,8 @@ namespace WebApi.Services
         private (RefreshToken, Account) getRefreshToken(string token)
         {
 
-            var account = _context.Accounts.SingleOrDefault(u => u.RefreshTokens.Any(t => t.Token == token));
+            var account = _context.Accounts.Include(x => x.RefreshTokens).SingleOrDefault(u => u.RefreshTokens.Any(t => t.Token == token));
+            //var account = _context.Accounts.SingleOrDefault(u => u.RefreshTokens.Any(t => t.Token == token));
             if (account == null)
             {
                 Console.WriteLine("Exception thrown");

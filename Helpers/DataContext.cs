@@ -2,6 +2,8 @@ using log4net;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using System.Configuration;
+using System.ComponentModel.DataAnnotations.Schema;
+using System.Linq;
 using WebApi.Entities;
 
 
@@ -32,14 +34,9 @@ namespace WebApi.Helpers
             // connect to sqlite database
             options.UseSqlite(Configuration.GetConnectionString("WebApiDatabase"));
         }
-        // protected override void OnModelCreating(ModelBuilder modelBuilder)
-        // {
-        //     modelBuilder
-        //         .Entity<Account>()
-        //         .HasMany<Function>(s => s.UserFunctions)
-        //         //.WillCascadeOnDelete(false)
-        //         .WithOne(e => e.Id)
-        //         .OnDelete(DeleteBehavior.ClientCascade);
-        // }
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            //modelBuilder.Entity<Account>().HasMany(e => e.RefreshTokens).WithOne(e => e.Account).IsRequired();
+        }
     }
 }
