@@ -5,7 +5,7 @@ namespace WebApi.Entities
 {
     public class Function
     {
-        public int Id { get; set; }
+        public int FunctionId { get; set; }
         public string UserFunction { get; set; }
     }
 }

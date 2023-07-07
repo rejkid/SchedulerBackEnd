@@ -153,7 +153,7 @@ public class UserFriendlyException: Exception
         public ActionResult<AccountResponse> GetById(int id)
         {
             // users can get their own account and admins can get any account
-            if (id != Account.Id && Account.Role != Role.Admin)
+            if (id != Account.AccountId && Account.Role != Role.Admin)
                 return Unauthorized(new { message = "Unauthorized" });
 
             var account = _accountService.GetById(id);
@@ -188,7 +188,7 @@ public class UserFriendlyException: Exception
         public ActionResult<AccountResponse> Update(int id, UpdateRequest model)
         {
             // users can update their own account and admins can update any account
-            if (id != Account.Id && Account.Role != Role.Admin)
+            if (id != Account.AccountId && Account.Role != Role.Admin)
                 return Unauthorized(new { message = "Unauthorized" });
 
             // only admins can update role
@@ -203,7 +203,7 @@ public class UserFriendlyException: Exception
         public ActionResult<AccountResponse> AddSchedule(int id, UpdateScheduleRequest schedule)
         {
             // users can update their own account and admins can update any account
-            if (id != Account.Id && Account.Role != Role.Admin)
+            if (id != Account.AccountId && Account.Role != Role.Admin)
                 return Unauthorized(new { message = "Unauthorized" });
 
             var account = _accountService.AddSchedule(id, schedule);
@@ -215,7 +215,7 @@ public class UserFriendlyException: Exception
         public ActionResult<AccountResponse> UpdateSchedule(int id, UpdateScheduleRequest schedule)
         {
             // users can update their own account and admins can update any account
-            if (id != Account.Id && Account.Role != Role.Admin)
+            if (id != Account.AccountId && Account.Role != Role.Admin)
                 return Unauthorized(new { message = "Unauthorized" });
 
             var account = _accountService.UpdateSchedule(id, schedule);
@@ -227,7 +227,7 @@ public class UserFriendlyException: Exception
         public ActionResult<AccountResponse> DeleteSchedule(int id, UpdateScheduleRequest schedule)
         {
             // users can update their own account and admins can update any account
-            if (id != Account.Id && Account.Role != Role.Admin)
+            if (id != Account.AccountId && Account.Role != Role.Admin)
                 return Unauthorized(new { message = "Unauthorized" });
 
             var account = _accountService.DeleteSchedule(id, schedule);
@@ -238,7 +238,7 @@ public class UserFriendlyException: Exception
         public ActionResult<AccountResponse> AddFunction(int id, UpdateUserFunctionRequest function)
         {
             // users can update their own account and admins can update any account
-            if (id != Account.Id && Account.Role != Role.Admin)
+            if (id != Account.AccountId && Account.Role != Role.Admin)
                 return Unauthorized(new { message = "Unauthorized" });
 
             var account = _accountService.AddFunction(id, function);
@@ -250,7 +250,7 @@ public class UserFriendlyException: Exception
         public ActionResult<AccountResponse> DeleteFunction(int id, UpdateUserFunctionRequest function)
         {
             // users can update their own account and admins can update any account
-            if (id != Account.Id && Account.Role != Role.Admin)
+            if (id != Account.AccountId && Account.Role != Role.Admin)
                 return Unauthorized(new { message = "Unauthorized" });
 
             var account = _accountService.DeleteFunction(id, function);
@@ -262,7 +262,7 @@ public class UserFriendlyException: Exception
         public ActionResult<AccountResponse> MoveSchedule2Pool(int id, UpdateScheduleRequest scheduleReq)
         {
             // users can update their own account and admins can update any account
-            if (id != Account.Id && Account.Role != Role.Admin)
+            if (id != Account.AccountId && Account.Role != Role.Admin)
                 return Unauthorized(new { message = "Unauthorized" });
 
             var pool = _accountService.MoveSchedule2Pool(id, scheduleReq);
@@ -274,7 +274,7 @@ public class UserFriendlyException: Exception
         public ActionResult<AccountResponse> GetScheduleFromPool(int id, UpdateScheduleRequest scheduleReq)
         {
             // users can update their own account and admins can update any account
-            if (id != Account.Id && Account.Role != Role.Admin)
+            if (id != Account.AccountId && Account.Role != Role.Admin)
                 return Unauthorized(new { message = "Unauthorized" });
 
             var account = _accountService.GetScheduleFromPool(id, scheduleReq);
@@ -313,7 +313,7 @@ public class UserFriendlyException: Exception
         public IActionResult Delete(int id)
         {
             // users can delete their own account and admins can delete any account
-            if (id != Account.Id && Account.Role != Role.Admin)
+            if (id != Account.AccountId && Account.Role != Role.Admin)
                 return Unauthorized(new { message = "Unauthorized" });
 
             _accountService.Delete(id);

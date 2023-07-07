@@ -1138,22 +1138,32 @@ namespace WebApi.Services
                     var account = getAccount(id);
 
                     // Purge all schedules for the account
-                    foreach (var item in account.Schedules)
-                    {
-                        _context.Schedules.Remove(item);
-                    }
-                    foreach (var item in account.UserFunctions)
-                    {
-                        _context.UserFunctions.Remove(item);
-                    }
+                    //foreach (var item in account.Schedules)
+                    //{
+                    //    _context.Schedules.Remove(item);
+                    //}
+                    //foreach (var item in account.UserFunctions)
+                    //{
+                    //    _context.UserFunctions.Remove(item);
+                    //}
+                    //foreach (var item in account.RefreshTokens)
+                    //{
+                    //    _context.RefreshTokens.Remove(item);
+                    //}
+
+                    // Remove children
+                    account.Schedules.Clear();
+                    account.UserFunctions.Clear();
+                    account.RefreshTokens.Clear();
 
                     _context.Accounts.Remove(account);
                     _context.SaveChanges();
                     transaction.Commit();
                 }
-                catch (Exception )
+                catch (Exception ex)
                 {
                     transaction.Rollback();
+                    log.Error("Delete failed"+ ex.Message);
                     Console.WriteLine(Thread.CurrentThread.Name + "Error occurred.");
                 }
                 finally
@@ -1239,9 +1249,9 @@ namespace WebApi.Services
         private Account getAccount(int id)
         {
             Account account = null;
-            var accountAll = _context.Accounts.Include(x => x.Schedules).Include(x => x.UserFunctions)
+            var accountAll = _context.Accounts.Include(x => x.RefreshTokens).Include(x => x.Schedules).Include(x => x.UserFunctions)
                     .ToList();
-            account = accountAll.Find(x => x.Id == id);
+            account = accountAll.Find(x => x.AccountId == id);
             if (account == null) throw new KeyNotFoundException("Account not found");
             return account;
         }
@@ -1267,7 +1277,7 @@ namespace WebApi.Services
             var key = Encoding.ASCII.GetBytes(_appSettings.Secret);
             var tokenDescriptor = new SecurityTokenDescriptor
             {
-                Subject = new ClaimsIdentity(new[] { new Claim("id", account.Id.ToString()) }),
+                Subject = new ClaimsIdentity(new[] { new Claim("id", account.AccountId.ToString()) }),
                 Expires = DateTime.UtcNow.AddMinutes(15),
                 SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
             };

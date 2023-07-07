@@ -8,6 +8,7 @@ using System.Text;
 using System.Threading.Tasks;
 using WebApi.Helpers;
 using log4net;
+using Microsoft.EntityFrameworkCore;
 
 namespace WebApi.Middleware
 {
@@ -76,9 +77,10 @@ namespace WebApi.Middleware
                 var jwtToken = (JwtSecurityToken)validatedToken;
                 var accountId = int.Parse(jwtToken.Claims.First(x => x.Type == "id").Value);
 
-                // attach account to context on successful jwt validation
-                context.Items["Account"] = await dataContext.Accounts.FindAsync(accountId);
-                var account = await dataContext.Accounts.FindAsync(accountId);
+                // Attach account to context on successful jwt validation
+                context.Items["Account"] = dataContext.Accounts.Include(x => x.RefreshTokens).SingleOrDefault(x => x.AccountId == accountId);
+                //context.Items["Account"] = await dataContext.Accounts.Include(x => x.RefreshTokens).FindAsync(accountId);
+                //var account = await dataContext.Accounts.FindAsync(accountId);
                 log.Info("JWT (valid): for path: " + context.Request.Path);
 
                 var tokenExp = jwtToken.Claims.First(claim => claim.Type.Equals("exp")).Value;

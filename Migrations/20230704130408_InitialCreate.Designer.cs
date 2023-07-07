@@ -6,21 +6,23 @@ using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using WebApi.Helpers;
 
+#nullable disable
+
 namespace WebApi.Migrations
 {
     [DbContext(typeof(DataContext))]
-    [Migration("20230410085231_InitialCreate")]
+    [Migration("20230704130408_InitialCreate")]
     partial class InitialCreate
     {
+        /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder
-                .HasAnnotation("ProductVersion", "3.1.6");
+            modelBuilder.HasAnnotation("ProductVersion", "7.0.8");
 
             modelBuilder.Entity("WebApi.Entities.Account", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<int>("AccountId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
@@ -75,14 +77,14 @@ namespace WebApi.Migrations
                     b.Property<DateTime?>("Verified")
                         .HasColumnType("TEXT");
 
-                    b.HasKey("Id");
+                    b.HasKey("AccountId");
 
                     b.ToTable("Accounts");
                 });
 
             modelBuilder.Entity("WebApi.Entities.Function", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<int>("FunctionId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
@@ -92,16 +94,53 @@ namespace WebApi.Migrations
                     b.Property<string>("UserFunction")
                         .HasColumnType("TEXT");
 
-                    b.HasKey("Id");
+                    b.HasKey("FunctionId");
 
                     b.HasIndex("AccountId");
 
                     b.ToTable("UserFunctions");
                 });
 
+            modelBuilder.Entity("WebApi.Entities.RefreshToken", b =>
+                {
+                    b.Property<int>("RefreshTokenId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("AccountId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("Created")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatedByIp")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("Expires")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ReplacedByToken")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("Revoked")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RevokedByIp")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Token")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("RefreshTokenId");
+
+                    b.HasIndex("AccountId");
+
+                    b.ToTable("RefreshTokens");
+                });
+
             modelBuilder.Entity("WebApi.Entities.Schedule", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<int>("ScheduleId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
@@ -110,6 +149,12 @@ namespace WebApi.Migrations
 
                     b.Property<DateTime>("Date")
                         .HasColumnType("TEXT");
+
+                    b.Property<uint>("NoOfTimesAssigned")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<uint>("NoOfTimesDropped")
+                        .HasColumnType("INTEGER");
 
                     b.Property<bool>("NotifiedThreeDaysBefore")
                         .HasColumnType("INTEGER");
@@ -126,7 +171,7 @@ namespace WebApi.Migrations
                     b.Property<string>("UserFunction")
                         .HasColumnType("TEXT");
 
-                    b.HasKey("Id");
+                    b.HasKey("ScheduleId");
 
                     b.HasIndex("AccountId");
 
@@ -159,47 +204,18 @@ namespace WebApi.Migrations
                     b.ToTable("SchedulePoolElements");
                 });
 
-            modelBuilder.Entity("WebApi.Entities.Account", b =>
+            modelBuilder.Entity("WebApi.Entities.SystemInfo", b =>
                 {
-                    b.OwnsMany("WebApi.Entities.RefreshToken", "RefreshTokens", b1 =>
-                        {
-                            b1.Property<int>("Id")
-                                .ValueGeneratedOnAdd()
-                                .HasColumnType("INTEGER");
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
 
-                            b1.Property<int>("AccountId")
-                                .HasColumnType("INTEGER");
+                    b.Property<uint>("NoOfEmailsSentDayily")
+                        .HasColumnType("INTEGER");
 
-                            b1.Property<DateTime>("Created")
-                                .HasColumnType("TEXT");
+                    b.HasKey("Id");
 
-                            b1.Property<string>("CreatedByIp")
-                                .HasColumnType("TEXT");
-
-                            b1.Property<DateTime>("Expires")
-                                .HasColumnType("TEXT");
-
-                            b1.Property<string>("ReplacedByToken")
-                                .HasColumnType("TEXT");
-
-                            b1.Property<DateTime?>("Revoked")
-                                .HasColumnType("TEXT");
-
-                            b1.Property<string>("RevokedByIp")
-                                .HasColumnType("TEXT");
-
-                            b1.Property<string>("Token")
-                                .HasColumnType("TEXT");
-
-                            b1.HasKey("Id");
-
-                            b1.HasIndex("AccountId");
-
-                            b1.ToTable("RefreshTokens");
-
-                            b1.WithOwner("Account")
-                                .HasForeignKey("AccountId");
-                        });
+                    b.ToTable("SystemInformation");
                 });
 
             modelBuilder.Entity("WebApi.Entities.Function", b =>
@@ -209,11 +225,29 @@ namespace WebApi.Migrations
                         .HasForeignKey("AccountId");
                 });
 
+            modelBuilder.Entity("WebApi.Entities.RefreshToken", b =>
+                {
+                    b.HasOne("WebApi.Entities.Account", "Account")
+                        .WithMany("RefreshTokens")
+                        .HasForeignKey("AccountId");
+
+                    b.Navigation("Account");
+                });
+
             modelBuilder.Entity("WebApi.Entities.Schedule", b =>
                 {
                     b.HasOne("WebApi.Entities.Account", null)
                         .WithMany("Schedules")
                         .HasForeignKey("AccountId");
+                });
+
+            modelBuilder.Entity("WebApi.Entities.Account", b =>
+                {
+                    b.Navigation("RefreshTokens");
+
+                    b.Navigation("Schedules");
+
+                    b.Navigation("UserFunctions");
                 });
 #pragma warning restore 612, 618
         }

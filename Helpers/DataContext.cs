@@ -34,9 +34,9 @@ namespace WebApi.Helpers
             // connect to sqlite database
             options.UseSqlite(Configuration.GetConnectionString("WebApiDatabase"));
         }
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
-        {
-            modelBuilder.Entity<Account>().HasMany(e => e.RefreshTokens).WithOne(e => e.Account).IsRequired();
-        }
+        //protected override void OnModelCreating(ModelBuilder modelBuilder)
+        //{
+        //    modelBuilder.Entity<Account>().HasMany(e => e.RefreshTokens).WithOne(e => e.Account).IsRequired();
+        //}
     }
 }

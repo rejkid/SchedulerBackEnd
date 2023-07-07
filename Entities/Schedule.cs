@@ -4,7 +4,7 @@ namespace WebApi.Entities
 {
     public class Schedule
     {
-        public int Id { get; set; }
+        public int ScheduleId { get; set; }
         public DateTime Date { get; set; }
         public Boolean Required { get; set; }
         public Boolean UserAvailability { get; set; }
