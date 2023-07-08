@@ -32,7 +32,7 @@ namespace WebApi.Helpers
         private static IEmailService _emailService;
         private readonly IServiceScope scope;
         private static IConfiguration _configuration;
-        static readonly object lockObject = new object();
+        static readonly object lockObject = AccountService.lockObject; // Share locing object with account service
 
         public ScheduleFunctionRemainder(IServiceProvider provider)
         {
@@ -98,6 +98,7 @@ namespace WebApi.Helpers
 
                 foreach (var s in a.Schedules)
                 {
+                   
                     Monitor.Enter(lockObject);
                     using (IDbContextTransaction transaction = context.Database.BeginTransaction())
                     {

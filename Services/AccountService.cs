@@ -72,7 +72,7 @@ namespace WebApi.Services
         private readonly IMapper _mapper;
         private readonly AppSettings _appSettings;
         private readonly IEmailService _emailService;
-        static readonly object lockObject = new object();
+        public static readonly object lockObject = new object();
         private readonly IHubContext<MessageHub, IMessageHubClient> _hubContext;
         public AccountService(
             DataContext context,
