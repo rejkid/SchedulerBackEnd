@@ -17,6 +17,7 @@ using Microsoft.EntityFrameworkCore.Internal;
 using AutoMapper.Internal;
 using Microsoft.Extensions.Primitives;
 using Org.BouncyCastle.Ocsp;
+using static Google.Apis.Requests.BatchRequest;
 
 namespace WebApi.Controllers
 {
@@ -152,11 +153,26 @@ public class UserFriendlyException: Exception
         [HttpGet("{id:int}")]
         public ActionResult<AccountResponse> GetById(int id)
         {
+            var account = _accountService.GetById(id);
             // users can get their own account and admins can get any account
             if (id != Account.AccountId && Account.Role != Role.Admin)
-                return Unauthorized(new { message = "Unauthorized" });
+            {
+                log.ErrorFormat("User AccountId:{0} First Name:{1} Last Name:{2} e-mail:{3} tried to get the info about \n " +
+                    "AccountId:{4} First Name:{5} Last Name:{6} e-mail:{7}",
+                    Account.AccountId,
+                    Account.FirstName,
+                    Account.LastName,
+                    Account.Email,
 
-            var account = _accountService.GetById(id);
+                    id,
+                    account.FirstName,
+                    account.LastName,
+                    account.Email
+                    );
+
+                return Unauthorized(new { message = "Unauthorized" });
+            }
+
             return Ok(account);
         }
 
