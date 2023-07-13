@@ -999,6 +999,7 @@ namespace WebApi.Services
                         schedule.UserFunction = poolElement.UserFunction;
                         schedule.UserAvailability = scheduleReq.UserAvailability;
                         schedule.Required = scheduleReq.Required;
+                        schedule.ScheduleGroup = scheduleReq.ScheduleGroup;
 
 
                         account.Schedules.Add(schedule);
@@ -1207,6 +1208,7 @@ namespace WebApi.Services
             var newPoolElement = new SchedulePoolElement();
             newPoolElement = _mapper.Map<SchedulePoolElement>(item);
             newPoolElement.Email = account.Email;
+            newPoolElement.ScheduleGroup = item.ScheduleGroup;
             _context.SchedulePoolElements.Add(newPoolElement);
             _context.SaveChanges();
         }
