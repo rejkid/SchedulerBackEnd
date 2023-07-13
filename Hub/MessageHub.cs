@@ -8,10 +8,10 @@ namespace WebApi.Hub
     public class MessageHub : Hub<IMessageHubClient>
     {
         private static readonly ILog log = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
-        public async Task SendUpdatesToUser()
+        public async Task SendUpdatesToUser(int id)
         {
             log.InfoFormat("Before Clients.Caller.SendUpdate() called");
-            await Clients.Caller.SendUpdate();
+            await Clients.Caller.SendUpdate(id);
             log.InfoFormat("After Clients.Caller.SendUpdate() called");
         }
     }

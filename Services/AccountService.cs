@@ -559,6 +559,7 @@ namespace WebApi.Services
                             user = _mapper.Map<User>(account);
                             user.Function = schedule.UserFunction;
                             user.UserAvailability = schedule.UserAvailability;
+                            user.ScheduleGroup = schedule.ScheduleGroup;
                             team.Users.Add(user);
                         }
                     }
@@ -719,7 +720,7 @@ namespace WebApi.Services
 
                     account.Updated = DateTime.UtcNow;
                     _context.SaveChanges();
-                    _hubContext.Clients.All.SendUpdate();
+                    _hubContext.Clients.All.SendUpdate(id);
 
                     AccountResponse response = _mapper.Map<AccountResponse>(account);
 
@@ -756,7 +757,7 @@ namespace WebApi.Services
                     account.Schedules.Add(newSchedule);
                     _context.Accounts.Update(account);
                     _context.SaveChanges();
-                    _hubContext.Clients.All.SendUpdate();
+                    _hubContext.Clients.All.SendUpdate(id);
 
                     AccountResponse response = _mapper.Map<AccountResponse>(account);
 
@@ -805,7 +806,7 @@ namespace WebApi.Services
                     }
                     _context.Accounts.Update(account);
                     _context.SaveChanges();
-                    _hubContext.Clients.All.SendUpdate();
+                    _hubContext.Clients.All.SendUpdate(id);
 
                     AccountResponse response = _mapper.Map<AccountResponse>(account);
 
@@ -944,7 +945,7 @@ namespace WebApi.Services
                         account.Updated = DateTime.UtcNow;
                         _context.Accounts.Update(account);
                         _context.SaveChanges();
-                        _hubContext.Clients.All.SendUpdate();
+                        _hubContext.Clients.All.SendUpdate(id);
 
                         if (autEmail)
                         {
@@ -1003,7 +1004,7 @@ namespace WebApi.Services
                         account.Schedules.Add(schedule);
                         _context.Accounts.Update(account);
                         _context.SaveChanges();
-                        _hubContext.Clients.All.SendUpdate();
+                        _hubContext.Clients.All.SendUpdate(id);
 
                         AccountResponse response = _mapper.Map<AccountResponse>(account);
 
@@ -1252,7 +1253,10 @@ namespace WebApi.Services
             var accountAll = _context.Accounts.Include(x => x.RefreshTokens).Include(x => x.Schedules).Include(x => x.UserFunctions)
                     .ToList();
             account = accountAll.Find(x => x.AccountId == id);
-            if (account == null) throw new KeyNotFoundException("Account not found");
+            if (account == null)
+            {
+                throw new KeyNotFoundException("Account not found");
+            }
             return account;
         }
 

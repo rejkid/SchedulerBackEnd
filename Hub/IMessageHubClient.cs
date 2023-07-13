@@ -5,6 +5,6 @@ namespace WebApi.Hub
 {
     public interface IMessageHubClient
     {
-        Task SendUpdate();
+        Task SendUpdate(int id);
     }
 }
