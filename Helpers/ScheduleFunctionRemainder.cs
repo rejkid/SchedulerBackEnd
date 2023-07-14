@@ -59,6 +59,8 @@ namespace WebApi.Helpers
                 if (ts.TotalMilliseconds > HOUR_TIMEOUT.TotalMilliseconds) // Send e-mail every hour
                 {
                     DataContext localContext = null;
+
+                    Monitor.Enter(lockObject);
                     try
                     {
                         localContext = new DataContext(_configuration/*new DbContextOptionsBuilder<DataContext>()*/);
@@ -71,6 +73,7 @@ namespace WebApi.Helpers
                         {
                             localContext.Dispose();
                         }
+                        Monitor.Exit(lockObject);
                     }
                 }
                 Thread.Sleep(500);
